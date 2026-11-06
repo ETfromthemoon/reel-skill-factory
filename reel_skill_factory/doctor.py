@@ -123,5 +123,5 @@ def diagnose(config_path: Path, *, preinstall: bool = False, sample_url: str | N
                    "metadata accesible" if available else "Reel inaccesible; puede ser privado o estar bloqueado")
         except WorkflowError as exc:
             report("FALTA", "Instagram", str(exc))
-    report("REVISAR", "Entrada móvil", "guarda un enlace de Reel como .txt en Drive y confirma que llega a la carpeta")
+    report("REVISAR", "Entrada móvil", "sube un video o un .txt con enlace de Reel a Drive y confirma que llega a la carpeta")
     return 1 if hard_fail else 0
