@@ -38,6 +38,6 @@ $principal = New-ScheduledTaskPrincipal -UserId $identity -LogonType Interactive
 $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable
 
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal `
-    -Settings $settings -Description 'Procesa enlaces de Reels sincronizados con Google Drive.' -Force | Out-Null
+    -Settings $settings -Description 'Procesa videos y enlaces sincronizados con Google Drive.' -Force | Out-Null
 Start-ScheduledTask -TaskName $TaskName
 Write-Host "Tarea '$TaskName' instalada para $identity. Procesará la carpeta cada 5 minutos mientras la sesión esté abierta."

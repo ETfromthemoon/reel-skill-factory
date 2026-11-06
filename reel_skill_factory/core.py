@@ -113,9 +113,10 @@ def transcribe(url: str, model: str, workdir: Path) -> dict:
     return payload
 
 
-def generate(url: str, transcript: dict, workdir: Path) -> dict:
+def generate(source: str, transcript: dict, workdir: Path, *, source_type: str = "reel_url") -> dict:
     prompt = (ROOT / "prompts" / "create_skill.md").read_text(encoding="utf-8")
-    data = {"url": url, "duration_seconds": transcript.get("duracion_seg"),
+    data = {"source": source, "source_type": source_type,
+            "duration_seconds": transcript.get("duracion_seg"),
             "transcript": transcript["transcripcion"]}
     output_file = workdir / "generation.json"
     run(["codex", "exec", "--sandbox", "read-only", "--skip-git-repo-check",
@@ -230,7 +231,7 @@ def publish(config: Config, url: str, shortcode: str, result: dict) -> str:
         (checkout / source_path).write_text(source_markdown(url, result), encoding="utf-8")
         run(["git", "add", str(skill_path), str(source_path)], cwd=checkout)
         run(["git", "diff", "--cached", "--check"], cwd=checkout)
-        run(["git", "commit", "-qm", f"Add skill from Instagram Reel {shortcode}"], cwd=checkout)
+        run(["git", "commit", "-qm", f"Add skill from video {shortcode}"], cwd=checkout)
         run(["git", "push", "-q", "-u", "origin", branch], cwd=checkout, timeout=180)
         body_file = Path(temp) / "pr-body.md"
         body_file.write_text(f"Fuente: {url}\n\nBorrador para revisar. Análisis y marcas de tiempo: `{source_path}`.\n"

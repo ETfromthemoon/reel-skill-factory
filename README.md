@@ -2,17 +2,17 @@
 
 ![Un enlace de video pasa por una carpeta personal, se transcribe y se convierte en un borrador de skill revisable.](assets/workflow.png)
 
-Convierte enlaces de Reels de Instagram en borradores de skills revisables en GitHub. Cada persona configura su propia carpeta de Drive como bandeja de entrada. Usa el extractor `video-a-skill` del autor como base: `yt-dlp` obtiene subtítulos o audio y Whisper transcribe cuando hace falta. Solo se genera una skill si el audio contiene un método reutilizable.
+Convierte videos y enlaces de Reels de Instagram en borradores de skills revisables en GitHub. Cada persona configura su propia carpeta de Drive como bandeja de entrada. Usa el extractor `video-a-skill` del autor como base: `yt-dlp` obtiene subtítulos o audio de los enlaces; FFmpeg extrae el audio de archivos locales y Whisper lo transcribe. Solo se genera una skill si el audio contiene un método reutilizable.
 
 ```text
-Instagram (iPhone/Android) → enlace en un .txt dentro de tu carpeta de Drive
+Video del teléfono (.mp4/.mov) o enlace de Reel en un .txt → carpeta de Drive
   → Drive para escritorio → trabajador Python local
-  → yt-dlp + Whisper → Codex CLI → borrador de PR en GitHub
+  → FFmpeg o yt-dlp + Whisper → Codex CLI → borrador de PR en GitHub
 ```
 
-El correo y Apps Script son una **opción de entrada**, no requisitos: sirven para convertir el enlace compartido desde el teléfono en ese `.txt` cuando no hay una acción móvil que lo guarde directamente en Drive.
+El correo y Apps Script son una **opción de entrada**, no requisitos: sirven para convertir el enlace compartido desde el teléfono en un `.txt` cuando no hay una acción móvil que lo guarde directamente en Drive.
 
-El equipo debe estar encendido, conectado y con el trabajador activo (`watch` o tarea programada en Windows). Un Reel privado, retirado o inaccesible puede fallar. Las skills se proponen en **draft PRs**: nunca se fusionan ni instalan solas. El repositorio público recibe la skill, una fuente y un análisis breve; la transcripción completa permanece local. Cada usuario autentica sus propias cuentas de Google, Codex y GitHub. La generación con Codex puede estar sujeta a límites o costos de su cuenta.
+El equipo debe estar encendido, conectado y con el trabajador activo (`watch` o tarea programada en Windows). Un Reel privado, retirado o inaccesible puede fallar. Las skills se proponen en **draft PRs**: nunca se fusionan ni instalan solas. El repositorio público recibe la skill, una fuente y un análisis breve; la transcripción completa se procesa temporalmente en el computador y se envía a Codex, pero no se publica en el PR. Cada usuario autentica sus propias cuentas de Google, Codex y GitHub. La generación con Codex puede estar sujeta a límites o costos de su cuenta.
 
 ## Requisitos
 
@@ -35,9 +35,11 @@ El instalador necesita internet y, según el sistema, puede pedir permisos para 
 
 ### Entrada directa por la carpeta de Drive
 
-Coloca un archivo `.txt` con un solo enlace de Reel en tu carpeta `inbox`. Puede llamarse, por ejemplo, `reel-001.txt`. Tras sincronizarse, el trabajador lo detecta sin Gmail ni Apps Script. Este es también el modo más sencillo de probar el procesamiento desde el computador.
+Desde iPhone o Android, sube a `inbox` un video que tengas derecho a usar en formato `.mp4`, `.mov`, `.m4v`, `.webm` o `.mkv`, de hasta 500 MB. Tras sincronizarse con el computador y permanecer sin cambios durante 30 segundos, el trabajador extrae el audio y lo transcribe. El archivo de video permanece en Drive; el borrador de PR solo lleva una huella SHA-256, el análisis y la skill. Conserva el video original para revisar el resultado antes de fusionar el PR.
 
-Desde el teléfono, necesitas una acción que **cree un archivo de texto** en esa carpeta; compartir un enlace con la app de Drive no garantiza por sí solo que se cree ese archivo. En iPhone puedes explorar un atajo de la hoja Compartir que reciba URL/texto y use Guardar archivo en la ubicación de Google Drive disponible en Archivos. En Android, usa una acción o app que acepte texto compartido y lo guarde como `.txt` en Drive. Comprueba en tu teléfono que el enlace terminó dentro del archivo, porque las opciones de Compartir cambian entre apps y versiones.
+También puedes colocar un archivo `.txt` con un solo enlace de Reel en `inbox`, por ejemplo `reel-001.txt`. El trabajador usa `yt-dlp` para obtener subtítulos o audio. Es una forma sencilla de probar enlaces desde el computador.
+
+Si Instagram solo te ofrece **compartir el enlace**, eso no sube el video a Drive. Para la entrada directa, guarda primero un archivo de video al teléfono y súbelo desde la app de Drive. Para compartir solo el enlace, necesitas una acción que **cree un archivo de texto** en esa carpeta. En iPhone puedes explorar un atajo de la hoja Compartir que reciba URL/texto y use Guardar archivo en la ubicación de Google Drive disponible en Archivos. En Android, usa una acción o app que acepte texto compartido y lo guarde como `.txt` en Drive. Comprueba que el enlace terminó dentro del archivo; las opciones de Compartir cambian entre apps y versiones.
 
 ### Entrada opcional por correo desde iPhone y Android
 
@@ -58,7 +60,7 @@ El correo de entrada debe salir de `ALLOWED_SENDER`. Apps Script elimina paráme
 
 ## Resultado y revisión
 
-Cada Reel apto crea una rama `skill/CODIGO` y un draft PR con `skills/<nombre>/SKILL.md` y `sources/CODIGO.md`. La fuente contiene el enlace, análisis y marcas de tiempo, sin transcripción completa. Antes de fusionar, revisa la fidelidad al video, utilidad de la skill, vigencia de plataformas/comandos y derechos de reutilización. Una opinión o video promocional sin método se registra como `not_skillable` en `.local-state/results.json` y no crea PR. Un caso ambiguo queda como `needs_review`. Los errores no se repiten automáticamente; para reintentar luego de resolverlos usa `once --retry-failed`.
+Cada video apto crea una rama `skill/CODIGO` y un draft PR con `skills/<nombre>/SKILL.md` y `sources/CODIGO.md`. Para archivos locales, `CODIGO` deriva del SHA-256 del video; la fuente documenta la huella en vez de publicar el archivo. Para enlaces, la fuente contiene el URL. Ambos incluyen análisis y marcas de tiempo, sin transcripción completa. Antes de fusionar, revisa la fidelidad al video, utilidad de la skill, vigencia de plataformas/comandos y derechos de reutilización. Una opinión o video promocional sin método se registra como `not_skillable` en `.local-state/results.json` y no crea PR. Un caso ambiguo queda como `needs_review`. Los errores no se repiten automáticamente; para reintentar luego de resolverlos usa `once --retry-failed`.
 
 El worker usa una clonación temporal para cada PR y no modifica tu checkout. No lee ni sube cookies del navegador. La transcripción se envía a Codex CLI para generar el borrador; Codex se invoca en modo de solo lectura, sin comandos de shell y con búsqueda web activa para verificar detalles técnicos. El programa escribe únicamente los archivos del PR después de validar la estructura y las marcas de tiempo. Revisa todo contenido generado antes de usarlo.
 
@@ -70,4 +72,4 @@ La licencia MIT cubre el contenido original de este repositorio. No concede dere
 python -m unittest discover -s tests -v
 ```
 
-El test local cubre validación de enlaces, configuración y salida de generación. Una prueba completa requiere un Reel accesible, el teléfono, Drive sincronizado y autenticaciones activas; Gmail solo se necesita si eliges esa entrada.
+El test local cubre validación de enlaces, configuración, entrada de video y salida de generación. Una prueba completa requiere un video propio o Reel accesible, el teléfono, Drive sincronizado y autenticaciones activas; Gmail solo se necesita si eliges esa entrada.

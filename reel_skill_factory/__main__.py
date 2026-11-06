@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import tempfile
@@ -12,6 +13,8 @@ from .doctor import diagnose
 
 
 STATE_PATH = ROOT / ".local-state" / "results.json"
+VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm", ".mkv"}
+MAX_VIDEO_BYTES = 500 * 1024 * 1024
 
 
 def _load_state() -> dict:
@@ -35,39 +38,61 @@ def process_inbox(config_path: Path, retry_failed: bool = False) -> tuple[int, i
     state = _load_state()
     count = 0
     failures = 0
-    for item in sorted(config.inbox_dir.glob("*.txt")):
+    inputs = sorted(item for item in config.inbox_dir.iterdir()
+                    if item.is_file() and item.suffix.lower() in VIDEO_EXTENSIONS | {".txt"})
+    for item in inputs:
+        key = item.name
         try:
-            if state.get(item.name, {}).get("status") == "failed" and not retry_failed:
+            if state.get(key, {}).get("status") == "failed" and not retry_failed:
                 continue
-            if item.stat().st_size > 16_384:
-                raise WorkflowError("El archivo de entrada supera 16 KB")
-            url, shortcode = find_reel_url(item.read_text(encoding="utf-8"))
+            if item.suffix.lower() == ".txt":
+                if item.stat().st_size > 16_384:
+                    raise WorkflowError("El archivo de entrada supera 16 KB")
+                source, shortcode = find_reel_url(item.read_text(encoding="utf-8"))
+                media = source
+                source_type = "reel_url"
+            else:
+                # Drive puede mostrar el archivo antes de terminar de sincronizarlo.
+                metadata = item.stat()
+                if time.time() - metadata.st_mtime < 30 or metadata.st_size == 0:
+                    continue
+                if metadata.st_size > MAX_VIDEO_BYTES:
+                    raise WorkflowError("El video supera 500 MB")
+                digest = hashlib.sha256()
+                with item.open("rb") as video:
+                    for chunk in iter(lambda: video.read(1024 * 1024), b""):
+                        digest.update(chunk)
+                current = item.stat()
+                if (current.st_size != metadata.st_size or
+                        current.st_mtime_ns != metadata.st_mtime_ns):
+                    continue
+                shortcode = f"video-{digest.hexdigest()[:16]}"
+                source = ("Video local aportado por el usuario "
+                          f"(SHA-256: {digest.hexdigest()}; archivo no incluido en el repositorio)")
+                media = str(item)
+                source_type = "local_video"
+            key = shortcode
             previous = state.get(shortcode, {})
             if previous.get("status") in {"published", "not_skillable", "needs_review"}:
                 continue
             if previous.get("status") == "failed" and not retry_failed:
                 continue
-            print(f"Procesando {url}", flush=True)
+            print(f"Procesando {item.name}", flush=True)
             with tempfile.TemporaryDirectory(prefix="reel-skill-") as temp:
                 workdir = Path(temp)
-                transcript = transcribe(url, config.whisper_model, workdir)
-                result = generate(url, transcript, workdir)
+                transcript = transcribe(media, config.whisper_model, workdir)
+                result = generate(source, transcript, workdir, source_type=source_type)
             if result["status"] == "skillable":
-                pr_url = publish(config, url, shortcode, result)
-                state[shortcode] = {"status": "published", "source": url, "pr": pr_url}
+                pr_url = publish(config, source, shortcode, result)
+                state[shortcode] = {"status": "published", "source": source, "pr": pr_url}
                 print(f"PR: {pr_url}", flush=True)
             else:
-                state[shortcode] = {"status": result["status"], "source": url,
+                state[shortcode] = {"status": result["status"], "source": source,
                                     "analysis": result["analysis"]}
                 print(f"{result['status']}: {result['analysis']}", flush=True)
             count += 1
         except (OSError, UnicodeError, WorkflowError) as exc:
             failures += 1
-            key = item.name
-            try:
-                _, key = find_reel_url(item.read_text(encoding="utf-8"))
-            except (OSError, UnicodeError, WorkflowError):
-                pass
             state[key] = {"status": "failed", "error": str(exc)}
             print(f"Error en {item.name}: {exc}", file=sys.stderr, flush=True)
         finally:
@@ -82,7 +107,7 @@ def main() -> int:
     doctor = sub.add_parser("doctor", help="comprueba equipo, herramientas e integraciones")
     doctor.add_argument("--preinstall", action="store_true")
     doctor.add_argument("--url", help="Reel público para probar acceso de yt-dlp")
-    once = sub.add_parser("once", help="procesa enlaces nuevos una vez")
+    once = sub.add_parser("once", help="procesa videos y enlaces nuevos una vez")
     once.add_argument("--retry-failed", action="store_true")
     sub.add_parser("watch", help="vigila la carpeta mientras este proceso esté abierto")
     args = parser.parse_args()

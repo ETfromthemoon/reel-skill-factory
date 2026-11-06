@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-extraer_transcripcion.py — Convierte un link de reel/short en transcripcion con timestamps.
+extraer_transcripcion.py — Convierte un link de reel/short o video local en transcripcion con timestamps.
 
 Pipeline (en orden de preferencia, para no descargar modelos pesados sin necesidad):
-  1. yt-dlp baja metadata (caption) + intenta subtitulos automaticos (es/en).
+  1. Enlaces: yt-dlp baja metadata (caption) + intenta subtitulos automaticos (es/en).
   2. Si hay subtitulos -> se parsean directo (rapido, sin Whisper).
-  3. Si no -> yt-dlp baja audio (mp3 mono 16kHz) y Whisper transcribe con timestamps.
+  3. Si no -> yt-dlp baja audio; para video local FFmpeg lo extrae. Whisper transcribe con timestamps.
 
 Salida: imprime un bloque JSON-ish legible y deja archivos en --outdir:
   - reel.info.json     (metadata cruda de yt-dlp)
@@ -13,7 +13,7 @@ Salida: imprime un bloque JSON-ish legible y deja archivos en --outdir:
 Si todo falla, devuelve codigo != 0 y un mensaje claro para hacer fallback manual.
 
 Uso:
-  python extraer_transcripcion.py "<URL>" [--outdir DIR] [--model small]
+  python extraer_transcripcion.py "<URL|VIDEO_LOCAL>" [--outdir DIR] [--model small]
          [--lang es] [--cookies-from-browser chrome]
 
 Requisitos: yt-dlp y ffmpeg en PATH. whisper solo si no hay subtitulos.
@@ -98,7 +98,7 @@ def transcript_lines(blocks):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("url")
+    ap.add_argument("url", help="URL de Reel o ruta de un video local")
     ap.add_argument("--outdir", default="reel_work")
     ap.add_argument("--model", default="small", help="modelo whisper: tiny/base/small/medium")
     ap.add_argument("--lang", default="auto", help="idioma del audio: es/en/auto")
@@ -108,7 +108,8 @@ def main():
                     help="ruta a un cookies.txt (workaround cuando Chrome falla por DPAPI en Windows)")
     args = ap.parse_args()
 
-    if not have("yt-dlp"):
+    local_video = os.path.isfile(args.url)
+    if not local_video and not have("yt-dlp"):
         log("ERROR: yt-dlp no esta en PATH. Instala con: pip install -U yt-dlp")
         sys.exit(2)
     if not have("ffmpeg"):
@@ -116,7 +117,7 @@ def main():
         sys.exit(2)
 
     os.makedirs(args.outdir, exist_ok=True)
-    url = clean_url(args.url)
+    url = os.path.abspath(args.url) if local_video else clean_url(args.url)
     base = os.path.join(args.outdir, "reel")
     cookie_args = []
     if args.cookies:
@@ -125,11 +126,12 @@ def main():
         cookie_args = ["--cookies-from-browser", args.cookies_from_browser]
 
     # --- Paso 1: metadata + caption + subtitulos automaticos ---
-    r = run(["yt-dlp", *cookie_args, "--write-info-json",
-             "--write-auto-subs", "--write-subs", "--sub-langs", "es,en,es-ES,en-US",
-             "--sub-format", "vtt", "--skip-download", "-o", base, url])
-    if r.returncode != 0:
-        log("AVISO yt-dlp (metadata):", r.stderr[-800:])
+    if not local_video:
+        r = run(["yt-dlp", *cookie_args, "--write-info-json",
+                 "--write-auto-subs", "--write-subs", "--sub-langs", "es,en,es-ES,en-US",
+                 "--sub-format", "vtt", "--skip-download", "-o", base, url])
+        if r.returncode != 0:
+            log("AVISO yt-dlp (metadata):", r.stderr[-800:])
 
     caption = ""
     duration = None
@@ -143,7 +145,7 @@ def main():
             log("AVISO: no pude leer info.json:", e)
 
     # --- Paso 2: usar subtitulos si existen ---
-    sub_files = sorted(glob.glob(base + "*.vtt") + glob.glob(base + "*.srt"))
+    sub_files = [] if local_video else sorted(glob.glob(base + "*.vtt") + glob.glob(base + "*.srt"))
     blocks = []
     fuente = None
     for sf in sub_files:
@@ -158,19 +160,28 @@ def main():
 
     # --- Paso 3: fallback a Whisper sobre el audio ---
     if not blocks:
-        log("No hay subtitulos utiles -> bajando audio para Whisper...")
-        ra = run(["yt-dlp", *cookie_args, "-x", "--audio-format", "mp3",
-                  "--audio-quality", "5", "--postprocessor-args", "-ar 16000 -ac 1",
-                  "-o", base + ".%(ext)s", url])
-        audio = base + ".mp3"
-        if ra.returncode != 0 or not os.path.exists(audio):
-            log("ERROR: no se pudo descargar el audio.")
-            log(ra.stderr[-800:])
-            log("\nFALLBACK: pide al usuario que pegue la transcripcion o el caption a mano.")
-            if caption:
-                print(json.dumps({"ok": False, "fuente": "solo_caption",
-                                  "caption": caption, "transcripcion": ""}, ensure_ascii=False))
-            sys.exit(1)
+        if local_video:
+            audio = base + ".wav"
+            ra = run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-i", url,
+                      "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", audio])
+            if ra.returncode != 0 or not os.path.exists(audio):
+                log("ERROR: no se pudo extraer el audio del video.")
+                log(ra.stderr[-800:])
+                sys.exit(1)
+        else:
+            log("No hay subtitulos utiles -> bajando audio para Whisper...")
+            ra = run(["yt-dlp", *cookie_args, "-x", "--audio-format", "mp3",
+                      "--audio-quality", "5", "--postprocessor-args", "-ar 16000 -ac 1",
+                      "-o", base + ".%(ext)s", url])
+            audio = base + ".mp3"
+            if ra.returncode != 0 or not os.path.exists(audio):
+                log("ERROR: no se pudo descargar el audio.")
+                log(ra.stderr[-800:])
+                log("\nFALLBACK: pide al usuario que pegue la transcripcion o el caption a mano.")
+                if caption:
+                    print(json.dumps({"ok": False, "fuente": "solo_caption",
+                                      "caption": caption, "transcripcion": ""}, ensure_ascii=False))
+                sys.exit(1)
 
         if not have("whisper"):
             log("ERROR: whisper no esta instalado y no hubo subtitulos.")
