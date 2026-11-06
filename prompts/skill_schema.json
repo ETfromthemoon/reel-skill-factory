@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "title", "slug", "description", "instructions_md", "analysis", "evidence", "technical_sources"],
+  "properties": {
+    "status": {"type": "string", "enum": ["skillable", "not_skillable", "needs_review"]},
+    "title": {"type": "string"},
+    "slug": {"type": "string"},
+    "description": {"type": "string"},
+    "instructions_md": {"type": "string"},
+    "analysis": {"type": "string"},
+    "technical_sources": {"type": "array", "items": {"type": "string"}},
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["timestamp", "finding"],
+        "properties": {
+          "timestamp": {"type": "string"},
+          "finding": {"type": "string"}
+        }
+      }
+    }
+  }
+}

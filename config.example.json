@@ -1,0 +1,7 @@
+{
+  "inbox_dir": "PATH_TO_SYNCED_DRIVE_FOLDER",
+  "repository": "OWNER/reel-skill-factory",
+  "base_branch": "main",
+  "whisper_model": "base",
+  "poll_seconds": 60
+}
