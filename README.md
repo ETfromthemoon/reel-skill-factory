@@ -9,7 +9,7 @@ Instagram (iPhone/Android) → compartir por correo → Gmail
   → yt-dlp + Whisper → Codex CLI → borrador de PR en GitHub
 ```
 
-El equipo debe estar encendido, conectado y con el comando `watch` activo. Un Reel privado, retirado o inaccesible puede fallar. Las skills se proponen en **draft PRs**: nunca se fusionan ni instalan solas. El repositorio público recibe la skill, una fuente y un análisis breve; la transcripción completa permanece local. Cada usuario autentica sus propias cuentas de Google, Codex y GitHub. La generación con Codex puede estar sujeta a límites o costos de su cuenta.
+El equipo debe estar encendido, conectado y con el trabajador activo (`watch` o tarea programada en Windows). Un Reel privado, retirado o inaccesible puede fallar. Las skills se proponen en **draft PRs**: nunca se fusionan ni instalan solas. El repositorio público recibe la skill, una fuente y un análisis breve; la transcripción completa permanece local. Cada usuario autentica sus propias cuentas de Google, Codex y GitHub. La generación con Codex puede estar sujeta a límites o costos de su cuenta.
 
 ## Requisitos
 
@@ -37,7 +37,7 @@ El equipo debe estar encendido, conectado y con el comando `watch` activo. Un Re
 
 2. Ejecuta `install()` una vez desde el editor y autoriza Gmail/Drive. Crea un disparador cada cinco minutos. `install()` inicia el cursor en el momento actual: envía el primer enlace **después** de ejecutarlo. No necesitas desplegar un web app ni exponer un webhook.
 3. En Instagram, abre un Reel, toca **Compartir → Compartir en... → Gmail/Mail**, envía el enlace a `INBOX_ADDRESS` y comprueba que aparece un `.txt` en la carpeta de Drive. Si Instagram no ofrece correo en tu teléfono, usa **Copiar enlace** dentro de Instagram y pégalo en un correo al mismo destino. El menú exacto depende de la versión de Instagram y del teléfono.
-4. Inicia el trabajador: `.\.venv\Scripts\python.exe -m reel_skill_factory watch` (Windows) o `.venv/bin/python -m reel_skill_factory watch` (macOS/Linux). Déjalo abierto o agrégalo al inicio de sesión de tu sistema. Para procesar una sola tanda usa `once`.
+4. Inicia el trabajador: en Windows ejecuta `./scripts/install-windows-task.ps1` para instalar una tarea de tu usuario que procesa la carpeta cada cinco minutos al iniciar sesión. Comprueba su estado con `Get-ScheduledTaskInfo -TaskName 'Reel Skill Factory'`; para quitarla usa `Unregister-ScheduledTask -TaskName 'Reel Skill Factory' -Confirm:$false`. En macOS/Linux ejecuta `.venv/bin/python -m reel_skill_factory watch` y déjalo abierto o agrégalo al inicio de sesión. También puedes ejecutar `watch` en Windows sin instalar la tarea. Para procesar una sola tanda usa `once`.
 
 El correo de entrada debe salir de `ALLOWED_SENDER`. Apps Script elimina parámetros de seguimiento del enlace, evita archivos duplicados por ID de mensaje y nunca guarda el correo completo. Si tu dominio no permite direcciones con `+`, usa una dirección o alias propio y verificado. También puedes poner un `.txt` con un enlace de Reel en la carpeta sincronizada para probar el trabajador sin correo.
 
