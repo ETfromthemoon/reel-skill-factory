@@ -12,4 +12,21 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
+      - run: sh -n setup.sh
+      - run: python -m py_compile scripts/prepare_runtime.py
       - run: python -m unittest discover -s tests -v
+  windows-installer-syntax:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - shell: pwsh
+        run: |
+          foreach ($file in @('setup.ps1', 'scripts/install-windows-task.ps1')) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file).Path, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error $_.Message }
+              exit 1
+            }
+          }

@@ -101,6 +101,7 @@ def transcribe(url: str, model: str, workdir: Path) -> dict:
     script = ROOT / "scripts" / "extraer_transcripcion.py"
     env = os.environ.copy()
     env["PATH"] = str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "")
+    env["PYTHONIOENCODING"] = "utf-8"
     output = run([sys.executable, str(script), url, "--outdir", str(workdir),
                   "--model", model, "--lang", "auto"], timeout=3600, env=env)
     try:

@@ -25,7 +25,7 @@ $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 if ($existing) {
     $action = $existing.Actions | Select-Object -First 1
-    if ($action.Execute -ne $python -or $action.WorkingDirectory -ne $repoRoot) {
+    if ($action.WorkingDirectory -ne $repoRoot) {
         throw "Ya existe una tarea llamada '$TaskName' con otra ubicación. Usa -TaskName para elegir otro nombre."
     }
 }
