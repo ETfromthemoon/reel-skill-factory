@@ -1,9 +1,10 @@
 {
   "type": "object",
   "additionalProperties": false,
-  "required": ["status", "title", "slug", "description", "instructions_md", "analysis", "evidence", "technical_sources"],
+  "required": ["status", "review_reason", "title", "slug", "description", "instructions_md", "analysis", "evidence", "technical_sources"],
   "properties": {
     "status": {"type": "string", "enum": ["skillable", "not_skillable", "needs_review"]},
+    "review_reason": {"type": "string", "enum": ["none", "transcription", "missing_context", "technical", "other"]},
     "title": {"type": "string"},
     "slug": {"type": "string"},
     "description": {"type": "string"},

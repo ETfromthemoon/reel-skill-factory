@@ -35,6 +35,15 @@ class ConfigTests(unittest.TestCase):
             path.write_text(json.dumps(data), encoding="utf-8")
             config = load_config(path)
             self.assertEqual(config.repository, "owner/repo")
+            self.assertIsNone(config.review_whisper_model)
+            data["review_whisper_model"] = "small"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            self.assertEqual(load_config(path).review_whisper_model, "small")
+            data["review_whisper_model"] = "invalid"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            with self.assertRaises(WorkflowError):
+                load_config(path)
+            data["review_whisper_model"] = "small"
             data["inbox_dir"] = str(Path(temp) / "missing")
             path.write_text(json.dumps(data), encoding="utf-8")
             with self.assertRaises(WorkflowError):
@@ -46,6 +55,7 @@ class GenerationTests(unittest.TestCase):
         self.transcript = "[00:01] Primero define el problema.\n[00:05] Después prueba la solución."
         self.result = {
             "status": "skillable",
+            "review_reason": "none",
             "title": "Resolver problemas",
             "slug": "resolver-problemas",
             "description": "Aplica un método para definir y probar soluciones a problemas.",
@@ -75,6 +85,13 @@ class GenerationTests(unittest.TestCase):
         self.result["evidence"] = []
         self.result["instructions_md"] = ""
         validate_generation(self.result, "")
+
+    def test_review_reason_matches_status(self):
+        self.result["status"] = "needs_review"
+        with self.assertRaises(WorkflowError):
+            validate_generation(self.result, self.transcript)
+        self.result["review_reason"] = "transcription"
+        validate_generation(self.result, self.transcript)
 
 
 if __name__ == "__main__":

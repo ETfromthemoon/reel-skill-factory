@@ -3,5 +3,6 @@
   "repository": "OWNER/reel-skill-factory",
   "base_branch": "main",
   "whisper_model": "base",
+  "review_whisper_model": null,
   "poll_seconds": 60
 }

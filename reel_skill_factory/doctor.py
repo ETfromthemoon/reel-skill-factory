@@ -92,6 +92,7 @@ def diagnose(config_path: Path, *, preinstall: bool = False, sample_url: str | N
             config = load_config(config_path)
             report("OK", "Carpeta Drive", str(config.inbox_dir))
             report("OK", "Configuración", config.repository)
+            report("OK", "Whisper de revisión", config.review_whisper_model or "desactivado")
         except WorkflowError as exc:
             report("FALTA", "Configuración", str(exc))
     else:
