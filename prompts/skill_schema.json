@@ -16,9 +16,10 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["timestamp", "finding"],
+        "required": ["timestamp", "modality", "finding"],
         "properties": {
           "timestamp": {"type": "string"},
+          "modality": {"type": "string", "enum": ["audio", "visual"]},
           "finding": {"type": "string"}
         }
       }

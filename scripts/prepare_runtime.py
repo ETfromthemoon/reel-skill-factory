@@ -32,7 +32,29 @@ def install_ffmpeg() -> Path:
             shutil.copy2(source, target)
         else:
             target.symlink_to(source)
-    subprocess.run([str(target), "-version"], check=True, capture_output=True, timeout=15)
+    subprocess.run([str(target), "-version"], check=True, capture_output=True, timeout=15,
+                   creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+    return target
+
+
+def ensure_ffprobe() -> Path:
+    """Watch Skill needs ffprobe as well as the bundled FFmpeg binary."""
+    target = Path(sys.executable).parent / ("ffprobe.exe" if os.name == "nt" else "ffprobe")
+    if target.is_symlink() and not target.exists():
+        target.unlink()
+    if target.is_file():
+        return target
+    found = shutil.which("ffprobe")
+    if found:
+        return Path(found)
+    os.environ.setdefault("WATCHSKILL_DATA_DIR", str(ROOT / ".local-state" / "watch-skill"))
+    from watch_skill.health.binaries import bootstrap_ffmpeg_portable
+
+    _, ffprobe = bootstrap_ffmpeg_portable()
+    if os.name == "nt":
+        shutil.copy2(ffprobe, target)
+    else:
+        target.symlink_to(ffprobe)
     return target
 
 
@@ -52,6 +74,8 @@ def main() -> None:
     args = parser.parse_args()
     path = install_ffmpeg()
     print(f"FFmpeg listo: {path}", flush=True)
+    probe = ensure_ffprobe()
+    print(f"ffprobe listo: {probe}", flush=True)
     if not args.skip_model:
         import whisper
 

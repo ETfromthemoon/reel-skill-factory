@@ -4,5 +4,6 @@
   "base_branch": "main",
   "whisper_model": "base",
   "review_whisper_model": null,
+  "visual_max_frames": 48,
   "poll_seconds": 60
 }

@@ -32,6 +32,7 @@ class Config:
     whisper_model: str
     poll_seconds: int
     review_whisper_model: str | None = None
+    visual_max_frames: int = 48
 
 
 def load_config(path: Path) -> Config:
@@ -57,10 +58,17 @@ def load_config(path: Path) -> Config:
         raise WorkflowError("poll_seconds debe ser un número entero") from exc
     if poll < 15:
         raise WorkflowError("poll_seconds debe ser al menos 15")
+    try:
+        visual_max_frames = int(data.get("visual_max_frames", 48))
+    except (TypeError, ValueError) as exc:
+        raise WorkflowError("visual_max_frames debe ser un número entero") from exc
+    if not 3 <= visual_max_frames <= 96:
+        raise WorkflowError("visual_max_frames debe estar entre 3 y 96")
     inbox = Path(str(data.get("inbox_dir", ""))).expanduser()
     if not inbox.is_dir():
         raise WorkflowError(f"No existe la carpeta de Drive sincronizada: {inbox}")
-    return Config(inbox.resolve(), repository, branch, model, poll, review_model)
+    return Config(inbox.resolve(), repository, branch, model, poll, review_model,
+                  visual_max_frames)
 
 
 def normalize_reel_url(value: str) -> tuple[str, str]:
@@ -93,7 +101,8 @@ def run(command: list[str], *, cwd: Path | None = None, input_text: str | None =
     try:
         result = subprocess.run(command, cwd=cwd, input=input_text, text=True,
                                 encoding="utf-8", errors="replace", capture_output=True,
-                                timeout=timeout, check=False, env=env)
+                                timeout=timeout, check=False, env=env,
+                                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise WorkflowError(f"Falló {command[0]}: {exc}") from exc
     if result.returncode:
@@ -118,33 +127,46 @@ def transcribe(url: str, model: str, workdir: Path) -> dict:
     return payload
 
 
-def generate(source: str, transcript: dict, workdir: Path, *, source_type: str = "reel_url") -> dict:
+def generate(source: str, transcript: dict, workdir: Path, *, source_type: str = "reel_url",
+             visual: dict | None = None) -> dict:
     prompt = (ROOT / "prompts" / "create_skill.md").read_text(encoding="utf-8")
     duration = transcript.get("duracion_seg")
     rounded_duration = (math.ceil(duration) if isinstance(duration, (int, float))
                         and math.isfinite(duration) and duration >= 0 else None)
+    frames = visual.get("frames", []) if visual else []
+    image_paths = [Path(frame["image"]) for frame in frames]
+    if any(not path.is_file() for path in image_paths):
+        raise WorkflowError("Faltan frames locales; vuelve a analizar el video")
     data = {"source": source, "source_type": source_type,
             "duration_seconds": rounded_duration,
-            "transcript": transcript["transcripcion"]}
+            "transcript": transcript["transcripcion"],
+            "frames": [{"image_number": index, "timestamp": frame["timestamp"],
+                        "ocr_text": frame["ocr_text"]}
+                       for index, frame in enumerate(frames, 1)]}
     output_file = workdir / "generation.json"
-    run(["codex", "exec", "--sandbox", "read-only", "--skip-git-repo-check",
+    command = ["codex", "exec", "--sandbox", "read-only", "--skip-git-repo-check",
          "--ephemeral", "--ignore-user-config", "--strict-config",
          "-c", 'web_search="live"', "-c", "skills.include_instructions=false",
          "-c", "skills.max_context_tokens=100", "-c", "features.shell_tool=false",
          "--output-schema",
          str(ROOT / "prompts" / "skill_schema.json"), "--output-last-message",
-         str(output_file), "--cd", str(workdir), "-"], cwd=workdir,
+         str(output_file), "--cd", str(workdir)]
+    for path in image_paths:
+        command.extend(["--image", str(path)])
+    # With images attached, a trailing positional '-' may be parsed as
+    # another image by some Codex CLI releases. Omission reads piped stdin.
+    run(command, cwd=workdir,
         input_text=prompt + "\n\n<video_data_json>\n" + json.dumps(data, ensure_ascii=False)
         + "\n</video_data_json>\n", timeout=900)
     try:
         result = json.loads(output_file.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise WorkflowError("Codex no produjo el JSON esperado") from exc
-    validate_generation(result, transcript["transcripcion"])
+    validate_generation(result, transcript["transcripcion"], visual)
     return result
 
 
-def validate_generation(result: dict, transcript: str) -> None:
+def validate_generation(result: dict, transcript: str, visual: dict | None = None) -> None:
     if result.get("status") not in {"skillable", "not_skillable", "needs_review"}:
         raise WorkflowError("Estado de generación inválido")
     reason = result.get("review_reason")
@@ -159,13 +181,22 @@ def validate_generation(result: dict, transcript: str) -> None:
     evidence = result.get("evidence")
     if not isinstance(evidence, list):
         raise WorkflowError("Falta lista de evidencia")
+    visual_timestamps = {frame["timestamp"] for frame in visual.get("frames", [])} if visual else set()
     for item in evidence:
         if not isinstance(item, dict) or not isinstance(item.get("timestamp"), str):
             raise WorkflowError("Evidencia inválida")
-        if not item["timestamp"].startswith("[") and f"[{item['timestamp']}]" in transcript:
+        if not item["timestamp"].startswith("["):
             item["timestamp"] = f"[{item['timestamp']}]"
-        if item["timestamp"] not in transcript or not TIMESTAMP.fullmatch(item["timestamp"]):
-            raise WorkflowError("La evidencia cita una marca de tiempo ausente en la transcripción")
+        if not TIMESTAMP.fullmatch(item["timestamp"]):
+            raise WorkflowError("La evidencia tiene una marca de tiempo inválida")
+        if item.get("modality") == "audio":
+            if item["timestamp"] not in transcript:
+                raise WorkflowError("La evidencia cita una marca ausente en la transcripción")
+        elif item.get("modality") == "visual":
+            if item["timestamp"] not in visual_timestamps:
+                raise WorkflowError("La evidencia cita un frame ausente")
+        else:
+            raise WorkflowError("La evidencia debe indicar modalidad audio o visual")
         if not isinstance(item.get("finding"), str) or not item["finding"].strip():
             raise WorkflowError("La evidencia no explica su hallazgo")
     sources = result.get("technical_sources")
@@ -181,7 +212,7 @@ def validate_generation(result: dict, transcript: str) -> None:
     if result["status"] != "skillable":
         return
     if not evidence:
-        raise WorkflowError("Una skill necesita evidencia de la transcripción")
+        raise WorkflowError("Una skill necesita evidencia del audio o los frames")
     if not SLUG.fullmatch(str(result.get("slug", ""))) or len(result["slug"]) > 48:
         raise WorkflowError("Nombre de skill inválido")
     if not isinstance(result.get("description"), str) or not 20 <= len(result["description"]) <= 500:
@@ -202,8 +233,9 @@ def skill_markdown(name: str, result: dict) -> str:
 
 def source_markdown(url: str, result: dict) -> str:
     lines = ["# Análisis de origen", "", f"Fuente: {url}", "", result["analysis"].strip(), "",
-             "## Evidencia de la transcripción", ""]
-    lines += [f"- {item['timestamp']} — {item['finding']}" for item in result["evidence"]]
+             "## Evidencia del video", ""]
+    lines += [f"- {item['timestamp']} ({item['modality']}) — {item['finding']}"
+              for item in result["evidence"]]
     if result["technical_sources"]:
         lines += ["", "## Fuentes técnicas", ""]
         lines += [f"- {source}" for source in result["technical_sources"]]
@@ -235,7 +267,8 @@ def publish(config: Config, url: str, shortcode: str, result: dict) -> str:
              f"https://github.com/{config.repository}.git", str(checkout)], timeout=180)
         try:
             existing = subprocess.run(["git", "ls-remote", "--exit-code", "--heads", "origin", branch],
-                                      cwd=checkout, capture_output=True, text=True, timeout=30)
+                                      cwd=checkout, capture_output=True, text=True, timeout=30,
+                                      creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise WorkflowError("No se pudo consultar la rama remota") from exc
         if existing.returncode == 0:
