@@ -2,10 +2,11 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from reel_skill_factory.core import (
-    WorkflowError, find_reel_url, load_config, normalize_reel_url,
-    skill_markdown, validate_generation,
+    WorkflowError, find_reel_url, generate, load_config, normalize_reel_url,
+    skill_markdown, source_markdown, validate_generation,
 )
 
 
@@ -61,7 +62,8 @@ class GenerationTests(unittest.TestCase):
             "description": "Aplica un método para definir y probar soluciones a problemas.",
             "instructions_md": "# Resolver problemas\n\n" + "Define el problema, formula una prueba y evalúa el resultado. " * 3,
             "analysis": "El video propone definir el problema y después probar una solución. Es un método repetible.",
-            "evidence": [{"timestamp": "[00:01]", "finding": "Define el problema primero"}],
+            "evidence": [{"timestamp": "[00:01]", "modality": "audio",
+                          "finding": "Define el problema primero"}],
             "technical_sources": [],
         }
 
@@ -92,6 +94,37 @@ class GenerationTests(unittest.TestCase):
             validate_generation(self.result, self.transcript)
         self.result["review_reason"] = "transcription"
         validate_generation(self.result, self.transcript)
+
+    def test_visual_only_evidence_requires_a_real_frame(self):
+        self.result["evidence"] = [{"timestamp": "[00:02]", "modality": "visual",
+                                     "finding": "La pantalla muestra un criterio"}]
+        visual = {"frames": [{"timestamp": "[00:02]"}]}
+        validate_generation(self.result, "", visual)
+        self.assertIn("(visual)", source_markdown("Fuente de prueba", self.result))
+        visual["frames"][0]["timestamp"] = "[00:03]"
+        with self.assertRaises(WorkflowError):
+            validate_generation(self.result, "", visual)
+
+    def test_generate_attaches_watch_frames_to_codex(self):
+        with tempfile.TemporaryDirectory() as temp:
+            workdir = Path(temp)
+            frame = workdir / "frame.jpg"
+            frame.write_bytes(b"imagen de prueba")
+            visual = {"frames": [{"timestamp": "[00:02]", "ocr_text": "Error visual",
+                                  "image": str(frame)}]}
+            self.result["evidence"] = [{"timestamp": "[00:02]", "modality": "visual",
+                                        "finding": "Error visual visible"}]
+
+            def fake_run(command, **kwargs):
+                output = Path(command[command.index("--output-last-message") + 1])
+                output.write_text(json.dumps(self.result), encoding="utf-8")
+                self.assertEqual(command[command.index("--image") + 1], str(frame))
+                self.assertEqual(command[-2:], ["--image", str(frame)])
+                self.assertIn('"ocr_text": "Error visual"', kwargs["input_text"])
+
+            with patch("reel_skill_factory.core.run", side_effect=fake_run):
+                self.assertEqual(generate("video de prueba", {"transcripcion": "",
+                                 "duracion_seg": 5}, workdir, visual=visual)["status"], "skillable")
 
 
 if __name__ == "__main__":

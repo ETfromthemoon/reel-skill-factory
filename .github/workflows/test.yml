@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v7
       - shell: pwsh
         run: |
-          foreach ($file in @('setup.ps1', 'scripts/install-windows-task.ps1')) {
+          foreach ($file in @('setup.ps1', 'scripts/install-windows-task.ps1', 'scripts/run-windows-task.ps1')) {
             $tokens = $null
             $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $file).Path, [ref]$tokens, [ref]$errors) | Out-Null

@@ -33,6 +33,15 @@ class InboxTests(unittest.TestCase):
         patcher = patch.object(worker, "load_config", return_value=self.config)
         patcher.start()
         self.addCleanup(patcher.stop)
+        self.frame = self.root / "frame.jpg"
+        self.frame.write_bytes(b"frame de prueba")
+        self.visual = {"frames": [{"timestamp": "[00:00]", "seconds": 0,
+                                    "image": str(self.frame), "ocr_text": "Tema"}],
+                       "has_audio": True, "duration_seconds": 15,
+                       "media_path": None, "captions": None}
+        patcher = patch.object(worker, "inspect_video", return_value=self.visual)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def make_old(self, name: str, content: bytes) -> Path:
         path = self.inbox / name
@@ -63,6 +72,7 @@ class InboxTests(unittest.TestCase):
         self.assertEqual(transcribe.call_count, 1)
         self.assertEqual(transcribe.call_args.args[0], str(video))
         self.assertEqual(generate.call_args.kwargs["source_type"], "local_video")
+        self.assertIs(generate.call_args.kwargs["visual"], self.visual)
         source = publish.call_args.args[1]
         self.assertIn(digest, source)
         self.assertNotIn(str(video), source)
@@ -84,6 +94,24 @@ class InboxTests(unittest.TestCase):
             self.assertEqual(worker.process_inbox(self.root / "config.json"), (1, 0))
         self.assertEqual(transcribe.call_args.args[0], "https://www.instagram.com/reel/ABC123/")
         self.assertEqual(generate.call_args.kwargs["source_type"], "reel_url")
+
+    def test_silent_video_uses_visual_evidence_without_transcribing(self):
+        self.make_old("silencio.mp4", b"video de prueba")
+        self.visual["has_audio"] = False
+        with patch.object(worker, "transcribe") as transcribe, \
+             patch.object(worker, "generate", return_value=self.result("not_skillable")) as generate:
+            self.assertEqual(worker.process_inbox(self.root / "config.json"), (1, 0))
+        transcribe.assert_not_called()
+        self.assertEqual(generate.call_args.args[1]["transcripcion"], "")
+
+    def test_watch_captions_avoid_second_download_and_transcription(self):
+        self.make_old("reel.txt", b"https://www.instagram.com/reel/ABC123/")
+        self.visual["captions"] = self.transcript()
+        with patch.object(worker, "transcribe") as transcribe, \
+             patch.object(worker, "generate", return_value=self.result("not_skillable")) as generate:
+            self.assertEqual(worker.process_inbox(self.root / "config.json"), (1, 0))
+        transcribe.assert_not_called()
+        self.assertEqual(generate.call_args.args[1], self.visual["captions"])
 
     def test_transcription_review_tries_small_and_publishes_only_clear_result(self):
         self.make_old("reel.txt", b"https://www.instagram.com/reel/ABC123/")

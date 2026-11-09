@@ -47,7 +47,8 @@ def have(tool):
 
 def run(cmd):
     log("·", " ".join(cmd))
-    return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                          creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
 
 
 def clean_url(url):

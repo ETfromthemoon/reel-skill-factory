@@ -14,6 +14,7 @@ from pathlib import Path
 
 from .core import ROOT, TIMESTAMP, WorkflowError, generate, load_config, publish, transcribe
 from .inputs import InboxItem, inbox_files, read_inbox_item
+from .visual import inspect_video
 
 
 STATE_DIR = ROOT / ".local-state"
@@ -113,13 +114,25 @@ def _saved_transcript(job_dir: Path) -> dict:
             "n_segmentos": len(lines), "fuente": "transcripción revisada"}
 
 
-def _analyze(item: InboxItem, model: str, job_dir: Path, *, use_saved: bool = False) -> tuple[dict, dict]:
+def _analyze(item: InboxItem, model: str, job_dir: Path, visual: dict, *,
+             use_saved: bool = False, force_whisper: bool = False) -> tuple[dict, dict]:
     attempt = _attempt_dir(job_dir, "edited" if use_saved else model)
     with tempfile.TemporaryDirectory(prefix="reel-skill-") as temp:
         workdir = Path(temp)
-        transcript = _saved_transcript(job_dir) if use_saved else transcribe(item.media, model, workdir)
+        if use_saved:
+            transcript = _saved_transcript(job_dir)
+        elif visual.get("captions") and not force_whisper:
+            transcript = visual["captions"]
+        elif not visual["has_audio"]:
+            transcript = {"transcripcion": "", "duracion_seg": visual["duration_seconds"],
+                          "n_segmentos": 0, "fuente": "video sin audio"}
+        else:
+            media_path = visual.get("media_path")
+            media = media_path if media_path and Path(media_path).is_file() else item.media
+            transcript = transcribe(media, model, workdir)
         _save_transcript(attempt, transcript, "edited" if use_saved else model)
-        result = generate(item.source, transcript, workdir, source_type=item.source_type)
+        result = generate(item.source, transcript, workdir, source_type=item.source_type,
+                          visual=visual)
     _write_json(attempt / "result.json", result)
     return transcript, result
 
@@ -136,7 +149,10 @@ def _process_item(item: InboxItem, config, state: dict, options: ProcessOptions)
                            "filename": item.filename, "job_dir": str(job_dir)}
     _write_json(STATE_PATH, state)
     model = options.model_override or config.whisper_model
-    transcript, result = _analyze(item, model, job_dir, use_saved=options.use_saved_transcript)
+    visual = inspect_video(item.media, job_dir,
+                           max_frames=getattr(config, "visual_max_frames", 48))
+    transcript, result = _analyze(item, model, job_dir, visual,
+                                  use_saved=options.use_saved_transcript)
     chosen_model = "edited" if options.use_saved_transcript else model
     fallback_error = None
     fallback = config.review_whisper_model
@@ -144,7 +160,8 @@ def _process_item(item: InboxItem, config, state: dict, options: ProcessOptions)
             and result["review_reason"] == "transcription" and fallback and fallback != model):
         print(f"Transcripción dudosa; reintentando con Whisper {fallback}", flush=True)
         try:
-            improved_transcript, improved_result = _analyze(item, fallback, job_dir)
+            improved_transcript, improved_result = _analyze(item, fallback, job_dir, visual,
+                                                            force_whisper=True)
             # A contradictory "not_skillable" result is not enough to discard a method.
             if improved_result["status"] != "not_skillable":
                 transcript, result, chosen_model = improved_transcript, improved_result, fallback
