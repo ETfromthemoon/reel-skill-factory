@@ -15,6 +15,7 @@ from pathlib import Path
 from .core import ROOT, TIMESTAMP, WorkflowError, generate, load_config, publish, transcribe
 from .inputs import InboxItem, inbox_files, read_inbox_item
 from .visual import inspect_video
+from .vault import write_vault
 
 
 STATE_DIR = ROOT / ".local-state"
@@ -39,6 +40,11 @@ def _write_text(path: Path, value: str) -> None:
 
 def _write_json(path: Path, value: dict) -> None:
     _write_text(path, json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+    if path == STATE_PATH:
+        try:
+            write_vault(value, JOBS_DIR, STATE_DIR)
+        except (OSError, ValueError) as exc:
+            print(f"No se pudo actualizar la bóveda local: {exc}", file=sys.stderr, flush=True)
 
 
 def load_state() -> dict:

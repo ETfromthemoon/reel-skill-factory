@@ -10,6 +10,8 @@ from pathlib import Path
 from .core import ROOT, WorkflowError, load_config
 from .doctor import diagnose
 from .worker import ProcessOptions, print_status, process_inbox
+from .vault import write_vault
+from .worker import JOBS_DIR, STATE_DIR, load_state
 
 
 def main() -> int:
@@ -28,12 +30,16 @@ def main() -> int:
                        help="usa la transcripción editada guardada en .local-state/jobs/<ID>/transcript.txt")
     status = sub.add_parser("status", help="muestra resultados y rutas de revisión")
     status.add_argument("item_id", nargs="?")
+    sub.add_parser("vault", help="actualiza la bóveda HTML local y muestra su ruta")
     sub.add_parser("watch", help="vigila la carpeta mientras este proceso esté abierto")
     args = parser.parse_args()
     if args.command == "doctor":
         return diagnose(args.config, preinstall=args.preinstall, sample_url=args.url)
     if args.command == "status":
         print_status(args.item_id)
+        return 0
+    if args.command == "vault":
+        print(write_vault(load_state(), JOBS_DIR, STATE_DIR))
         return 0
     if args.command == "retry":
         if args.use_transcript and args.model:
