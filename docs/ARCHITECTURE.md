@@ -10,6 +10,7 @@ Teléfono → Drive → carpeta local
   → extraer_transcripcion.py: FFmpeg/Whisper si no hay subtítulos
   → core.py + Codex: imágenes + texto, análisis estructurado y validación
   → core.py + Git/GitHub CLI: rama y draft PR (solo si es apto)
+  → vault.py: bóveda HTML local de solo lectura, actualizada con cada estado
 ```
 
 `__main__.py` solo define los comandos `doctor`, `once`, `watch`, `status` y `retry`. `doctor.py` revisa el equipo y las integraciones. `config.local.json` contiene la ruta y las preferencias locales; está ignorado por Git.

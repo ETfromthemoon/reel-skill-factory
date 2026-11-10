@@ -41,4 +41,17 @@ $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhen
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger @($trigger, $repeat) -Principal $principal `
     -Settings $settings -Description 'Procesa videos y enlaces sincronizados con Google Drive.' -Force | Out-Null
 if (-not $existing) { Start-ScheduledTask -TaskName $TaskName }
+& $venvPython -m reel_skill_factory vault | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'No se pudo crear la bóveda local.' }
+$vaultPath = Join-Path $repoRoot '.local-state\vault.html'
+$shell = New-Object -ComObject WScript.Shell
+foreach ($folder in @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Startup'))) {
+    $shortcut = $shell.CreateShortcut((Join-Path $folder 'Bóveda de Skills.lnk'))
+    $shortcut.TargetPath = Join-Path $env:WINDIR 'explorer.exe'
+    $shortcut.Arguments = '"' + $vaultPath + '"'
+    $shortcut.WorkingDirectory = $repoRoot
+    $shortcut.Description = 'Abrir la bóveda local de skills'
+    $shortcut.Save()
+}
 Write-Host "Tarea '$TaskName' instalada para $identity. Procesará la carpeta cada 5 minutos mientras la sesión esté abierta."
+Write-Host "Bóveda local: $vaultPath (acceso directo en el escritorio; se abre al iniciar sesión)."
