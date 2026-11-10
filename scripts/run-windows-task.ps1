@@ -1,3 +1,5 @@
+param([switch]$RetryFailed)
+
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $python = Join-Path $repoRoot '.venv\Scripts\python.exe'
@@ -10,9 +12,27 @@ if (-not (Test-Path -LiteralPath $python)) {
     exit 1
 }
 
+# Codex Desktop keeps its CLI in a versioned directory that is not part of
+# the persistent user PATH. A scheduled task does not inherit the app's PATH.
+$codexCommand = Get-Command codex.exe -ErrorAction SilentlyContinue
+$codexPath = if ($codexCommand) { $codexCommand.Source } else { $null }
+if (-not $codexPath) {
+    $codexRoot = Join-Path $env:LOCALAPPDATA 'OpenAI\Codex\bin'
+    if (Test-Path -LiteralPath $codexRoot) {
+        $codexPath = Get-ChildItem -LiteralPath $codexRoot -Directory |
+            ForEach-Object { Get-Item -LiteralPath (Join-Path $_.FullName 'codex.exe') -ErrorAction SilentlyContinue } |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1 -ExpandProperty FullName
+    }
+}
+if (-not $codexPath) {
+    [System.IO.File]::AppendAllText($logPath, "$(Get-Date -Format o) No se encontró codex.exe para la tarea programada`r`n")
+    exit 1
+}
+
 $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
 $startInfo.FileName = $python
-$startInfo.Arguments = '-m reel_skill_factory once'
+$startInfo.Arguments = if ($RetryFailed) { '-m reel_skill_factory once --retry-failed' } else { '-m reel_skill_factory once' }
 $startInfo.WorkingDirectory = $repoRoot
 $startInfo.UseShellExecute = $false
 $startInfo.CreateNoWindow = $true
@@ -22,6 +42,7 @@ $startInfo.RedirectStandardError = $true
 $startInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
 $startInfo.StandardErrorEncoding = [System.Text.Encoding]::UTF8
 $startInfo.EnvironmentVariables['PYTHONIOENCODING'] = 'utf-8'
+$startInfo.EnvironmentVariables['PATH'] = (Split-Path -Parent $codexPath) + [IO.Path]::PathSeparator + $startInfo.EnvironmentVariables['PATH']
 
 $process = [System.Diagnostics.Process]::new()
 $process.StartInfo = $startInfo
