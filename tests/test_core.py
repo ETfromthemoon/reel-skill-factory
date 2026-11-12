@@ -33,11 +33,16 @@ class ConfigTests(unittest.TestCase):
     def test_valid_config_and_missing_folder(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "config.json"
-            data = {"inbox_dir": temp, "repository": "owner/repo", "base_branch": "main"}
+            data = {"inbox_dir": temp}
             path.write_text(json.dumps(data), encoding="utf-8")
             config = load_config(path)
-            self.assertEqual(config.repository, "owner/repo")
+            self.assertFalse(config.library_dir.is_relative_to(Path(temp)))
             self.assertIsNone(config.review_whisper_model)
+            data["repository"] = "owner/old-public-repo"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            with self.assertRaisesRegex(WorkflowError, "GitHub ya no se usa"):
+                load_config(path)
+            data.pop("repository")
             data["review_whisper_model"] = "small"
             path.write_text(json.dumps(data), encoding="utf-8")
             self.assertEqual(load_config(path).review_whisper_model, "small")
@@ -46,6 +51,11 @@ class ConfigTests(unittest.TestCase):
             with self.assertRaises(WorkflowError):
                 load_config(path)
             data["review_whisper_model"] = "small"
+            data["library_dir"] = str(Path(temp) / "library")
+            path.write_text(json.dumps(data), encoding="utf-8")
+            with self.assertRaisesRegex(WorkflowError, "fuera del repositorio y de la carpeta"):
+                load_config(path)
+            data.pop("library_dir")
             data["inbox_dir"] = str(Path(temp) / "missing")
             path.write_text(json.dumps(data), encoding="utf-8")
             with self.assertRaises(WorkflowError):

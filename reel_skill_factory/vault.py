@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from html import escape
 from pathlib import Path
 
 
 STYLE = """body{font:16px system-ui,sans-serif;max-width:980px;margin:36px auto;padding:0 20px;background:#f7f6f2;color:#20232b}h1{font-size:2rem}p{line-height:1.5}.grid{display:grid;gap:18px}.card{background:white;border:1px solid #ddd;border-radius:16px;padding:22px;box-shadow:0 2px 10px #0001}.meta{color:#626873;font-size:.9rem}.badge{display:inline-block;background:#e7f4ec;color:#176438;border-radius:99px;padding:4px 10px}a{color:#185caa}details{margin-top:14px;border-top:1px solid #eee;padding-top:12px}summary{cursor:pointer;font-weight:650}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.5 ui-monospace,monospace;background:#f5f5f5;padding:16px;border-radius:10px}img{max-width:180px;max-height:130px;object-fit:cover;border-radius:8px;float:right;margin:0 0 12px 16px}form{clear:both;margin:16px 0;padding:14px;border:1px solid #ddd;border-radius:10px}label{display:block;margin:8px 0;font-weight:600}textarea{display:block;width:100%;min-height:64px;box-sizing:border-box;margin-top:5px;font:inherit}button{background:#176438;color:white;border:0;border-radius:8px;padding:10px 14px;cursor:pointer}@media(max-width:600px){img{float:none;display:block;margin:0 0 12px}}"""
-STATUS_LABELS = {"published": "Borrador listo", "processing": "Procesando", "failed": "Error",
+STATUS_LABELS = {"draft": "Borrador privado", "processing": "Procesando", "failed": "Error",
                  "needs_review": "Requiere revisión", "not_skillable": "Sin skill reutilizable",
                  "skillable": "Creando borrador"}
 
@@ -37,12 +38,11 @@ def render_vault(state: dict, jobs_dir: Path, state_dir: Path, *, token: str | N
         activated = (jobs_dir / item_id / "activation.json").exists()
         status = "Activa" if activated else _text(STATUS_LABELS.get(record.get("status"), "Pendiente"))
         description = _text(result.get("description") or record.get("error") or "En proceso o pendiente de revisión.")
-        pr = record.get("pr", "")
-        link = (f'<p><a href="{_text(pr)}" target="_blank" rel="noopener noreferrer">Abrir borrador en GitHub ↗</a></p>'
-                if isinstance(pr, str) and pr.startswith("https://github.com/") else "")
-        if record.get("status") == "needs_review" and link:
-            link += '<p class="meta">El PR conserva la versión anterior; esta regeneración necesita revisión.</p>'
-        if token and record.get("status") == "published" and not activated:
+        draft_path = record.get("draft_path", "")
+        link = f'<p class="meta">Archivo privado: {_text(draft_path)}</p>' if draft_path else ""
+        if record.get("status") == "needs_review" and draft_path:
+            link += '<p class="meta">El borrador anterior permanece; esta regeneración necesita revisión.</p>'
+        if token and record.get("status") == "draft" and not activated:
             activity_text = (activity or {}).get(item_id)
             if activity_text:
                 link += f'<p class="meta">{_text(activity_text)}</p>'
@@ -60,15 +60,19 @@ def render_vault(state: dict, jobs_dir: Path, state_dir: Path, *, token: str | N
                     report = json.loads(reports[-1].read_text(encoding="utf-8"))
                     link += f'<details><summary>Última prueba: {_text(report.get("status"))}</summary>'
                     link += f'<pre>{_text(json.dumps(report, ensure_ascii=False, indent=2))}</pre></details>'
-                    if report.get("status") == "review" and not activated:
+                    current_hash = (hashlib.sha256(Path(draft_path).read_text(encoding="utf-8").encode()).hexdigest()
+                                    if draft_path and Path(draft_path).is_file() else "")
+                    if report.get("revision") != current_hash:
+                        link += '<p class="meta">Esta prueba es de otra versión del borrador. Vuelve a probar.</p>'
+                    if report.get("status") == "review" and report.get("revision") == current_hash and not activated:
                         link += (f'<form method="post" action="/action"><input type="hidden" name="token" value="{_text(token)}">'
                                  f'<input type="hidden" name="item_id" value="{_text(item_id)}">'
                                  '<label><input type="checkbox" name="confirm" value="yes" required> Revisé la prueba y sus vacíos</label>'
-                                 '<button name="action" value="activate">Activar: fusionar PR e instalar</button></form>')
+                                 '<button name="action" value="activate">Aprobar e instalar en mis agentes</button></form>')
                 except (OSError, ValueError):
                     pass
         if activated:
-            link += '<p class="badge">Integrada e instalada localmente</p>'
+            link += '<p class="badge">Aprobada e instalada localmente</p>'
         skill = result.get("instructions_md", "")
         details = ""
         if skill:

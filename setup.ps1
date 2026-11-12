@@ -76,8 +76,6 @@ $diskCheck = @($python.Prefix) + @('-c', 'import shutil,sys; sys.exit(0 if shuti
 & $python.Command @diskCheck
 if ($LASTEXITCODE -ne 0) { throw 'Se necesitan al menos 3 GB libres para instalar Whisper y su modelo.' }
 
-Ensure-Tool 'git' 'Git.Git'
-Ensure-Tool 'gh' 'GitHub.cli'
 Ensure-Tool 'codex' 'OpenAI.Codex'
 
 if (-not $SkipDriveDesktop) {
@@ -101,8 +99,6 @@ $runtimeArgs = @('scripts/prepare_runtime.py')
 if ($SkipModelDownload) { $runtimeArgs += '--skip-model' }
 & $venvPython @runtimeArgs
 if ($LASTEXITCODE -ne 0) { throw 'No se pudo preparar FFmpeg o Whisper.' }
-& $venvPython -m reel_skill_factory sync-skills
-if ($LASTEXITCODE -ne 0) { throw 'No se pudieron instalar las skills integradas; revisa el conflicto mostrado.' }
 
-Write-Host 'Dependencias instaladas. Configura config.local.json, autentica GitHub/Codex y ejecuta:'
+Write-Host 'Dependencias instaladas. Configura config.local.json, autentica Codex y ejecuta:'
 Write-Host '  .\.venv\Scripts\python.exe -m reel_skill_factory doctor'

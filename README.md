@@ -1,106 +1,70 @@
 # Reel Skill Factory
 
-![Un video pasa por una carpeta personal y se convierte en un borrador de skill revisable.](assets/workflow.png)
+![Del video al borrador privado de skill](assets/workflow.png)
 
-Convierte videos y enlaces de Reels de Instagram en borradores de skills revisables en GitHub. Cada persona configura su propia carpeta de Drive como bandeja de entrada. [Watch Skill](https://github.com/oxbshw/watch-skill) descarga el video, selecciona frames de toda su duración y lee texto en pantalla mediante OCR. Los subtítulos o Whisper aportan el audio. Codex combina ambas evidencias y solo propone una skill si encuentra un método reutilizable. Un video sin voz también puede servir si el método está explicado visualmente.
+Workflow local para convertir videos en skills de Codex. Este repositorio comparte **el programa**, no las skills de quien lo usa. Cada persona configura su propia carpeta de entrada y conserva sus borradores y aprobaciones en una biblioteca privada fuera del checkout.
 
 ```text
-Video del teléfono (.mp4/.mov) o enlace de Reel en un .txt → carpeta de Drive
-  → Drive para escritorio → trabajador Python local
-  → Watch Skill: frames + OCR + subtítulos → Whisper si falta transcripción
-  → Codex CLI: mapa de enseñanzas → skill → revisión de fidelidad
-  → borrador de PR en GitHub si supera la revisión
+Teléfono → video o enlace de Reel en Drive → carpeta sincronizada
+  → Watch Skill: frames, OCR y subtítulos → Whisper si hace falta audio
+  → Codex: mapa de enseñanzas → skill → control de fidelidad
+  → biblioteca privada: borrador → prueba → aprobación → instalación local
 ```
 
-El correo y Apps Script son una **opción de entrada**, no requisitos: sirven para convertir el enlace compartido desde el teléfono en un `.txt` cuando no hay una acción móvil que lo guarde directamente en Drive.
+Un video sin voz puede generar una skill visual. Para un post de Threads, guarda el archivo de video y súbelo a la carpeta: el trabajador automático de enlaces `.txt` acepta Reels de Instagram, no enlaces de Threads. Los Reels privados o retirados pueden fallar.
 
-El equipo debe estar encendido, conectado y con el trabajador activo (`watch` o tarea programada en Windows). Un Reel privado, retirado o inaccesible puede fallar. Las skills se proponen en **draft PRs**: nunca se fusionan ni instalan solas. El repositorio público recibe la skill, una fuente y un análisis breve; la transcripción, los frames y el OCR completos permanecen en `.local-state/jobs/`. Codex recibe la transcripción, el OCR y las imágenes seleccionadas para analizarlas, pero los archivos originales no se publican en el PR. Cada usuario autentica sus propias cuentas de Google, Codex y GitHub. El análisis de imágenes puede aumentar el uso de Codex.
+## Instalar
 
-## Requisitos
+1. Descarga el ZIP o clona este repositorio. En Windows ejecuta `./setup.ps1`; en macOS/Linux, `sh setup.sh`. El instalador prepara Python, Codex CLI, FFmpeg, yt-dlp, Whisper y Watch Skill con OCR. En Windows/macOS también puede instalar Drive para escritorio. Usa `-SkipModelDownload` o `--skip-model-download` para posponer la descarga de Whisper, y `-SkipDriveDesktop` o `--skip-drive-desktop` si ya sincronizas la carpeta por otro medio.
+2. Inicia sesión con `codex login`. Crea una carpeta en Drive y sincronízala con el computador. Copia `config.example.json` a `config.local.json` y cambia `inbox_dir` por la ruta local de esa carpeta. `library_dir` es opcional; por defecto usa `~/.reel-skill-factory/library`. Debe estar fuera del repositorio y de la carpeta de entrada. La configuración local está ignorada por Git.
+3. Ejecuta `.venv\Scripts\python.exe -m reel_skill_factory doctor` en Windows, o `.venv/bin/python -m reel_skill_factory doctor` en macOS/Linux. El diagnóstico comprueba el equipo, la carpeta, el procesamiento visual, audio y Codex. Una subida real desde el teléfono sigue siendo necesaria para verificar la entrada móvil.
+4. En Windows, ejecuta `./scripts/install-windows-task.ps1`. Instala una tarea oculta que procesa la carpeta cada cinco minutos y abre la bóveda local al iniciar sesión. En macOS/Linux, deja corriendo `.venv/bin/python -m reel_skill_factory watch` y `.venv/bin/python -m reel_skill_factory vault --serve`, o configúralos al inicio de sesión.
 
-- Windows, macOS o Linux. Recomendados 4 GB de RAM y 3 GB libres; el doctor informa la capacidad real.
-- Windows: [WinGet](https://learn.microsoft.com/windows/package-manager/winget/). macOS: [Homebrew](https://brew.sh/). Linux: `apt`, `dnf` o `pacman`. El instalador prepara Python 3.11, Git, [GitHub CLI](https://cli.github.com/) y [Codex CLI](https://github.com/openai/codex) cuando faltan; en Windows/macOS también instala [Google Drive para escritorio](https://support.google.com/drive/answer/10838124). En Linux usa el instalador oficial de Codex.
-- Cuenta Google para Drive y acceso de escritura al repositorio GitHub de destino. Gmail y Apps Script solo son necesarios si eliges la entrada por correo.
-- Un Reel que `yt-dlp` pueda leer. No se usan cookies de navegador automáticamente.
+El instalador requiere internet y puede pedir permisos para instalar aplicaciones. En Linux no hay cliente oficial de Drive para escritorio: usa una carpeta local o una sincronización que configures tú. No necesitas cuenta ni repositorio de GitHub para generar skills.
 
-## Instalar y comprobar viabilidad
+## Enviar videos
 
-1. Descarga el ZIP de este repositorio o clónalo si ya tienes Git, y abre una terminal en su carpeta. Ejecuta `./setup.ps1` en PowerShell o `sh setup.sh` en macOS/Linux. Si Windows bloquea la ejecución de scripts, usa `powershell -ExecutionPolicy Bypass -File .\setup.ps1` para esta ejecución. El script comprueba la versión de Python y el espacio libre antes de instalar. Prepara las herramientas externas que falten, crea `.venv`, instala `yt-dlp`, `openai-whisper`, `watch-skill[perceive,ocr]`, FFmpeg y `ffprobe`, y descarga el modelo Whisper `base` para el primer uso. Si ya existe `config.local.json`, descarga el modelo elegido allí. Watch Skill usa OCR local; su modelo predeterminado viene con la dependencia. No instala paquetes de nuevo cuando ya están disponibles.
-   - Para posponer la descarga del modelo: `./setup.ps1 -SkipModelDownload` o `sh setup.sh --skip-model-download`.
-   - Para usar otra sincronización o solo una carpeta local: `./setup.ps1 -SkipDriveDesktop` o `sh setup.sh --skip-drive-desktop`.
-2. Ejecuta `gh auth login`, `gh auth setup-git` y `codex login` si aún no están autenticados. Configura el autor de Git con `git config --global user.name "Tu nombre"` y `git config --global user.email "tu@email"` si falta.
-3. Crea una carpeta de Drive, por ejemplo `VIDEO TO SKILL`, y sincronízala con Drive para escritorio. Copia `config.example.json` a `config.local.json`; cambia `inbox_dir` por la ruta local real y `repository` por `OWNER/REPO`. `config.local.json` está excluido de Git. `visual_max_frames` limita las imágenes examinadas por video (48 por defecto; admite 3–96). Para un segundo intento automático cuando la transcripción sea el motivo de `needs_review`, define `"review_whisper_model": "small"`. Es opcional: Whisper descargará ese modelo la primera vez que lo necesite y puede tardar más en computadores modestos.
-4. Ejecuta `.\.venv\Scripts\python.exe -m reel_skill_factory doctor` en Windows o `.venv/bin/python -m reel_skill_factory doctor` en macOS/Linux. Opcionalmente añade `--url https://www.instagram.com/reel/CODIGO/` para probar la disponibilidad de un Reel público. El doctor comprueba autenticación de Codex/GitHub, soporte de imágenes en Codex, Watch Skill/OCR, FFmpeg/ffprobe, repositorio y carpeta; la entrada desde el teléfono exige una prueba real.
-5. Inicia el trabajador: en Windows ejecuta `./scripts/install-windows-task.ps1` para instalar una tarea de tu usuario que procesa la carpeta cada cinco minutos al iniciar sesión, sin abrir consola visible. Comprueba su estado con `Get-ScheduledTaskInfo -TaskName 'Reel Skill Factory'` y revisa `.local-state/task.log` para ver el PID y el resultado de cada pasada; para quitarla usa `Unregister-ScheduledTask -TaskName 'Reel Skill Factory' -Confirm:$false`. En macOS/Linux ejecuta `.venv/bin/python -m reel_skill_factory watch` y déjalo abierto o agrégalo al inicio de sesión. También puedes ejecutar `watch` en Windows sin instalar la tarea. Para procesar una sola tanda usa `once`.
+Desde iPhone o Android sube un `.mp4`, `.mov`, `.m4v`, `.webm` o `.mkv` de hasta 500 MB a la carpeta sincronizada. También puedes guardar allí un `.txt` que contenga un único enlace público de Reel de Instagram. Si Instagram solo comparte el enlace, necesitas una acción móvil que cree ese archivo `.txt`; compartir un enlace a la carpeta no descarga el video.
 
-La instalación en Windows abre la **Bóveda de Skills** en `http://127.0.0.1:8766/` con accesos directos en el escritorio e Inicio automático. El trabajador inicia el servidor local en segundo plano y conserva su PID y logs en `.local-state/`. La página se actualiza cada 30 segundos y ofrece botones para probar y activar cada borrador. Solo escucha en el propio computador; no requiere cuenta adicional. En macOS/Linux ejecuta `.venv/bin/python -m reel_skill_factory vault --serve` y abre esa URL. `vault` sin `--serve` sigue generando una copia HTML de solo lectura. Si el puerto 8766 está ocupado, el servidor informa el error en su log.
+Opcionalmente, [Code.gs](google_apps_script/Code.gs) puede recibir un correo enviado desde la hoja Compartir del teléfono y crear el `.txt` en Drive. Cada usuario autoriza y configura su propia cuenta de Google. La entrada por correo no es requisito del trabajador local.
 
-El instalador necesita internet y, según el sistema, puede pedir permisos para instalar aplicaciones. En Linux instala la versión de PyTorch para CPU, suficiente para Whisper sin descargar componentes CUDA. No puede iniciar sesión por ti en Google, GitHub ni Codex, elegir tu carpeta de Drive o comprobar el menú Compartir de tu teléfono. En Linux no hay un cliente oficial de Google Drive para escritorio: usa una carpeta local o configura una sincronización compatible por tu cuenta. Si el gestor de paquetes indicado no está disponible, el script se detiene con una instrucción concreta.
+El computador debe estar encendido y la carpeta sincronizada. El trabajador espera que un archivo deje de cambiar antes de procesarlo. Los errores no se reintentan solos; usa `once --retry-failed` o `retry ID`.
 
-### Entrada directa por la carpeta de Drive
+## Bóveda, prueba y activación
 
-Desde iPhone o Android, sube a `inbox` un video que tengas derecho a usar en formato `.mp4`, `.mov`, `.m4v`, `.webm` o `.mkv`, de hasta 500 MB. Tras sincronizarse con el computador y permanecer sin cambios durante 30 segundos, el trabajador examina los frames y transcribe el audio cuando existe. El archivo de video permanece en Drive; el borrador de PR solo lleva una huella SHA-256, el análisis y la skill. Conserva el video original para revisar el resultado antes de fusionar el PR.
+En Windows abre **Bóveda de Skills** desde el escritorio, o visita `http://127.0.0.1:8766/`. La bóveda solo escucha en el propio computador. Muestra los borradores, la tesis extraída del video, las evidencias y los vacíos. Cada resultado apto queda en:
 
-También puedes colocar un archivo `.txt` con un solo enlace de Reel en `inbox`, por ejemplo `reel-001.txt`. Watch Skill usa `yt-dlp` para obtener el video y sus subtítulos; Whisper transcribe el audio si faltan. Es una forma sencilla de probar enlaces desde el computador.
-
-Los enlaces compartidos de Threads no están admitidos como entrada `.txt` por este trabajador. Para analizar un video de Threads, guarda el archivo del video y súbelo a `inbox` como `.mp4` o usa el análisis manual con Watch Skill. Un video sin pista de audio puede producir una skill visual si sus frames explican el método. En una generación manual, `core.generate(..., task_intent=...)` permite indicar qué técnica se busca extraer cuando el tema que aparece en pantalla no es el objetivo de la skill.
-
-Si Instagram solo te ofrece **compartir el enlace**, eso no sube el video a Drive. Para la entrada directa, guarda primero un archivo de video al teléfono y súbelo desde la app de Drive. Para compartir solo el enlace, necesitas una acción que **cree un archivo de texto** en esa carpeta. En iPhone puedes explorar un atajo de la hoja Compartir que reciba URL/texto y use Guardar archivo en la ubicación de Google Drive disponible en Archivos. En Android, usa una acción o app que acepte texto compartido y lo guarde como `.txt` en Drive. Comprueba que el enlace terminó dentro del archivo; las opciones de Compartir cambian entre apps y versiones.
-
-### Entrada opcional por correo desde iPhone y Android
-
-Esta opción convierte el enlace que compartes desde Instagram en un `.txt` dentro de **tu misma carpeta de Drive**. Úsala si quieres compartir desde el teléfono sin crear el archivo manualmente.
-
-1. En [Google Apps Script](https://script.google.com/), crea un proyecto nuevo y copia [Code.gs](google_apps_script/Code.gs). En **Project Settings → Script Properties**, define:
-
-   | Propiedad | Valor |
-   | --- | --- |
-   | `INBOX_ADDRESS` | Una variante de tu Gmail, por ejemplo `nombre+reels@gmail.com` |
-   | `ALLOWED_SENDER` | Tu dirección desde la que compartirás los Reels |
-   | `DRIVE_FOLDER_ID` | ID de la carpeta `inbox` en su URL de Drive |
-
-2. Ejecuta `install()` una vez desde el editor y autoriza Gmail/Drive. Crea un disparador cada cinco minutos. `install()` inicia el cursor en el momento actual: envía el primer enlace **después** de ejecutarlo. No necesitas desplegar un web app ni exponer un webhook.
-3. En Instagram, abre un Reel, toca **Compartir → Compartir en... → Gmail/Mail**, envía el enlace a `INBOX_ADDRESS` y comprueba que aparece un `.txt` en la carpeta de Drive. Si Instagram no ofrece correo en tu teléfono, usa **Copiar enlace** dentro de Instagram y pégalo en un correo al mismo destino. El menú exacto depende de la versión de Instagram y del teléfono.
-
-El correo de entrada debe salir de `ALLOWED_SENDER`. Apps Script elimina parámetros de seguimiento del enlace, evita archivos duplicados por ID de mensaje y nunca guarda el correo completo. Si tu dominio no permite direcciones con `+`, usa una dirección o alias propio y verificado.
-
-## Resultado y revisión
-
-### Probar y activar una skill
-
-En la bóveda interactiva, abre un borrador y describe **un caso concreto** y **el resultado esperado**. Pulsa **Probar en entorno aislado**. Codex recibe la versión exacta de la skill del PR y trabaja en una carpeta temporal con permisos de escritura limitados a ese espacio. Un segundo Codex compara los archivos y la respuesta con el resultado esperado; deja `pass` o `review` con evidencia y vacíos. La bóveda muestra el informe en `.local-state/jobs/ID/evaluations/`. Revisa el resultado personalmente: una prueba aprobada solo demuestra este caso, no todos los usos posibles. El sandbox limita las escrituras al espacio de prueba, pero no equivale a una máquina virtual sin acceso de lectura al equipo.
-
-Si la prueba satisface tu caso, pulsa **Activar: fusionar PR e instalar** y marca que revisaste la prueba y sus vacíos. Si el evaluador dejó `review`, comprueba por tu cuenta lo pendiente antes de aceptar. El sistema exige que el PR siga abierto, que contenga solo la skill y su fuente, que sus checks estén verdes y que el commit evaluado sea el actual. Fusiona el PR con squash, comprueba el archivo integrado e instala la skill en `~/.codex/skills` y `~/.agents/skills`. Así queda disponible para Codex y para agentes que lean la carpeta compartida de skills; otros agentes pueden requerir su propia ruta. La activación es una acción explícita de publicación en el repositorio público. Si prefieres la terminal, usa `evaluate ID --scenario "..." --expected "..."` y `activate ID`; con un informe `review` añade `--accept-gaps` tras revisar. `activate ID --target RUTA` instala solo en una carpeta elegida. Para retirar una skill, elimina su carpeta de instalación y revierte el commit en GitHub por el proceso habitual de revisión.
-
-Al clonar o descargar el repositorio, `setup` instala automáticamente las skills ya integradas en `skills/` en esas dos carpetas locales. Para incorporar nuevas aprobaciones después de actualizar el repositorio, ejecuta `python -m reel_skill_factory sync-skills` con el Python de `.venv`. También puedes usar `--target RUTA` para la carpeta de otro agente. La sincronización respeta las modificaciones locales: actualiza solo archivos que ella misma instaló anteriormente o que coinciden con el repositorio. Los borradores de PR no entran en ese catálogo.
-
-Cada video apto crea una rama `skill/CODIGO` y un draft PR con `skills/<nombre>/SKILL.md` y `sources/CODIGO.md`. Para archivos locales, `CODIGO` deriva del SHA-256 del video; la fuente documenta la huella en vez de publicar el archivo. Para enlaces, la fuente contiene el URL. Ambos incluyen análisis y marcas de tiempo de evidencia de audio o visual, sin transcripción ni frames completos. Si el video anuncia una lista y faltan elementos verificables, queda en `needs_review` en vez de inventar los puntos. Antes de fusionar, revisa fidelidad, utilidad, vigencia técnica y derechos de reutilización. Una opinión o video promocional sin método se registra como `not_skillable` y no crea PR. Cuando la duda proviene de la transcripción y configuraste `review_whisper_model`, el trabajador hace un segundo intento antes de dejarlo pendiente. Los errores no se repiten automáticamente; para reintentar todos los fallos usa `once --retry-failed`.
-
-La generación ahora separa la tesis y los puntos observados en un mapa con evidencia, redacta una skill desde ese mapa y encarga una revisión de fidelidad aparte. Si la revisión encuentra una pérdida sustancial, se hace una corrección automática y se revisa una vez más. Un fallo de fidelidad bloquea la publicación. La sección de fuente y la bóveda distinguen lo que enseñaba el video de las adaptaciones editoriales. El veredicto automático orienta la revisión humana; no demuestra por sí solo que la interpretación sea correcta.
-
-### Revisar y reintentar un video
-
-`status` muestra el ID de cada video y su estado. Un trabajo conserva `visual.json`, los frames en `watch/`, `transcript.txt`, `analysis.md`, `result.json` y los intentos anteriores en `.local-state/jobs/ID/`. Estos archivos no se suben a GitHub. Para revisar un caso desde PowerShell:
-
-```powershell
-.\.venv\Scripts\python.exe -m reel_skill_factory status
-.\.venv\Scripts\python.exe -m reel_skill_factory status CODIGO
-.\.venv\Scripts\python.exe -m reel_skill_factory retry CODIGO --model small
-.\.venv\Scripts\python.exe -m reel_skill_factory retry CODIGO --refresh-draft
+```text
+~/.reel-skill-factory/library/drafts/ID/SKILL.md
+~/.reel-skill-factory/library/drafts/ID/source.md
 ```
 
-En macOS/Linux usa `.venv/bin/python` en las mismas órdenes. Si el modelo aún deja errores, corrige manualmente `.local-state/jobs/CODIGO/transcript.txt`, conservando `[mm:ss]` al comienzo de cada línea, y ejecuta `retry CODIGO --use-transcript`. Ese reintento usa la edición sin descargar ni transcribir otra vez. Revisa la fidelidad al audio antes de editar: el programa no puede certificar una corrección humana. Para regenerar un PR existente usa `retry CODIGO --refresh-draft`: reutiliza la transcripción y los frames guardados, conserva el resultado anterior en `history/` y actualiza el mismo PR únicamente si continúa abierto como borrador y solo contiene los archivos de esa skill. Si la revisión nueva falla, deja el PR anterior intacto y muestra la regeneración pendiente en la bóveda. Los intentos previos se conservan bajo `attempts/`.
+Los frames, transcripciones e informes de trabajo permanecen en `.local-state/jobs/ID/` del checkout y Git los ignora. El video original permanece en la carpeta de entrada. Ni los borradores ni las skills aprobadas se envían a este repositorio.
 
-El worker usa una clonación temporal para cada PR y no modifica tu checkout. No lee ni sube cookies del navegador. Watch Skill procesa frames y OCR localmente; la transcripción, el OCR y las imágenes elegidas se envían a Codex CLI para generar el borrador. Codex se invoca en modo de solo lectura, sin comandos de shell y con búsqueda web activa para verificar detalles técnicos. El programa escribe únicamente los archivos del PR después de validar la estructura y las marcas de tiempo. Revisa todo contenido generado antes de usarlo.
+Para probar un borrador, describe un caso concreto y el resultado esperado en la bóveda y pulsa **Probar en entorno aislado**. Codex intenta resolverlo en una carpeta temporal; otro evaluador compara la respuesta y los archivos con tu criterio. El informe queda en `.local-state/jobs/ID/evaluations/`. Revisa el resultado tú mismo: una prueba de un caso no demuestra todos los usos. El sandbox limita las escrituras, pero no es una máquina virtual aislada de las lecturas del equipo. En Windows, si Codex no puede escribir el archivo de prueba, el evaluador debe dejarlo en `review`.
 
-La división de módulos, los estados y los límites de privacidad están en [Arquitectura](docs/ARCHITECTURE.md).
+Cuando estés conforme, marca que revisaste los vacíos y pulsa **Aprobar e instalar en mis agentes**. La skill pasa a `~/.reel-skill-factory/library/approved/NOMBRE/SKILL.md` y se copia a `~/.codex/skills` y `~/.agents/skills`. No hay publicación remota. Para otro agente, indica su carpeta de skills con `activate ID --target RUTA` o `sync-skills --target RUTA`. La sincronización no reemplaza ediciones locales ajenas.
 
-La licencia MIT cubre el contenido original de este repositorio. No concede derechos sobre los videos de terceros; quien publica una skill debe revisar su procedencia y su redacción.
+Comandos útiles (usa el Python de `.venv`):
+
+```text
+python -m reel_skill_factory status
+python -m reel_skill_factory retry ID --refresh-draft
+python -m reel_skill_factory evaluate ID --scenario "Caso concreto..." --expected "Resultado esperado..."
+python -m reel_skill_factory activate ID
+python -m reel_skill_factory sync-skills
+```
+
+`retry ID --use-transcript` reutiliza una transcripción corregida en `.local-state/jobs/ID/transcript.txt`; conserva las marcas `[mm:ss]`. `retry ID --refresh-draft` reutiliza la evidencia guardada, deja el resultado anterior en `history/` y actualiza solo el borrador privado si la nueva revisión de fidelidad es apta. Si el evaluador de la prueba marca `review`, `activate ID` requiere `--accept-gaps` después de comprobar esos vacíos por tu cuenta.
+
+## Privacidad y límites
+
+Codex recibe la transcripción, OCR y frames seleccionados para analizar el video. El repositorio compartido contiene únicamente código, prompts genéricos, documentación y pruebas. La biblioteca privada se guarda fuera de él; `.local-state/` y `config.local.json` están ignorados. No subas manualmente videos, transcripciones ni bibliotecas personales a un repositorio público. La licencia MIT cubre el código original, no concede derechos sobre videos de terceros.
 
 ## Pruebas
 
-```bash
+```text
 python -m unittest discover -s tests -v
 ```
 
-Las pruebas locales cubren validación de enlaces, entrada de video, estados, reintentos y salida de generación. Una prueba completa requiere un video propio o Reel accesible, el teléfono, Drive sincronizado y autenticaciones activas; Gmail solo se necesita si eliges esa entrada.
+La arquitectura y los estados están en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

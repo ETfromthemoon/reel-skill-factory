@@ -72,7 +72,7 @@ def serve(config_path, port: int = 8766) -> None:
                         message = f"Prueba terminada: {path}. Revisa los archivos y el resultado."
                     else:
                         paths = activate(config, item_id, accept_gaps=True)
-                        message = "Skill integrada e instalada: " + ", ".join(map(str, paths))
+                        message = "Skill aprobada e instalada localmente: " + ", ".join(map(str, paths))
                 except (WorkflowError, OSError, ValueError) as exc:
                     message = f"Error: {exc}"
                 with lock:

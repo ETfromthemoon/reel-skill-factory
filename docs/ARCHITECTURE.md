@@ -1,41 +1,37 @@
-# Arquitectura del flujo
+# Arquitectura del workflow
 
-El producto usa un trabajador Python y, para la revisión interactiva, un servidor HTTP local ligado a `127.0.0.1`. Drive para escritorio sincroniza una carpeta; no hay servidor remoto, base de datos ni credenciales de Google dentro del trabajador.
+El repositorio distribuye el programa, no los resultados personales. El trabajador Python lee una carpeta sincronizada con Drive y guarda los borradores en una biblioteca privada fuera del checkout. La bóveda HTTP solo escucha en `127.0.0.1:8766`. No hay base de datos, servidor remoto ni requisito de GitHub.
 
 ```text
 Teléfono → Drive → carpeta local
-  → inputs.py: enlace o video estable, validación e ID
+  → inputs.py: enlace de Reel o video estable, validación e ID
   → worker.py: exclusión mutua, estado, intentos y reintentos
   → visual.py + Watch Skill: video, frames, OCR y subtítulos
   → extraer_transcripcion.py: FFmpeg/Whisper si no hay subtítulos
-  → core.py + Codex: mapa de enseñanzas, skill y revisión de fidelidad
-  → core.py + Git/GitHub CLI: rama y draft PR (solo si es apto)
-  → vault.py/vault_server.py: bóveda local y controles de prueba/activación
-  → lifecycle.py: prueba temporal, evaluación y promoción explícita
+  → core.py + Codex: mapa, skill y revisión de fidelidad
+  → library.py: borrador privado fuera del repositorio
+  → vault.py/vault_server.py: revisión local
+  → lifecycle.py: prueba temporal, aprobación y copia a agentes locales
 ```
 
-`__main__.py` define los comandos `doctor`, `once`, `watch`, `status`, `vault`, `retry`, `evaluate`, `activate` y `sync-skills`. `doctor.py` revisa el equipo y las integraciones. `sync-skills` instala el catálogo integrado en carpetas locales de agentes y registra hashes en `.local-state/installed-skills.json` para preservar ediciones del usuario. `config.local.json` contiene la ruta y las preferencias locales; está ignorado por Git.
+`config.local.json` contiene la carpeta de entrada y, opcionalmente, `library_dir`. Está ignorado por Git. La biblioteca predeterminada es `~/.reel-skill-factory/library`; `load_config` rechaza bibliotecas dentro del checkout o de la entrada sincronizada. `drafts/ID` conserva `SKILL.md`, `source.md` y metadatos; `approved/NOMBRE` contiene solo skills aceptadas. `sync-skills` copia estas últimas a las carpetas de agentes y protege ediciones locales con hashes.
 
-## Estado y recuperación
+## Estados y recuperación
 
-- `processing`: comenzó una pasada. Si el proceso se interrumpe, la siguiente pasada puede repetirla; la rama y PR se comprueban antes de crear otra.
-- `needs_review`: existe un método posible, pero falta evidencia para publicar. El trabajador guarda la transcripción y el análisis para corrección humana.
-- `not_skillable`: no hay un método aprovechable con la evidencia disponible.
-- `published`: se verificó el PR y su URL quedó en el estado local. Los PR nuevos se crean como borradores.
+- `processing`: comenzó una pasada. Si se interrumpe, el siguiente intento puede repetirla.
+- `needs_review`: hay una posible skill, pero falta evidencia o fidelidad. Se conservan los artefactos locales.
+- `not_skillable`: la evidencia no permite extraer un método reutilizable.
+- `draft`: el borrador privado está listo para revisar y probar.
 - `failed`: falló una etapa técnica; `retry ID` o `once --retry-failed` permiten reintentar.
 
-El estado vive en `.local-state/results.json`; una vez completada cada etapa, el ID conserva `.local-state/jobs/ID/transcript.txt`, `analysis.md`, `result.json` y copias de los intentos en `attempts/`. Los cambios se escriben de forma atómica. Un bloqueo de archivo impide que una ejecución manual y la tarea programada procesen a la vez; la pasada programada se omite si hay un reintento en curso. Los archivos recientes esperan 10 segundos si son `.txt` y 30 segundos si son videos para reducir lecturas durante la sincronización de Drive.
+El estado, la transcripción, los frames, el mapa y los informes de prueba viven en `.local-state/` del checkout, ignorado por Git. La biblioteca privada vive fuera del checkout. Las escrituras de archivos nuevos usan reemplazo atómico; un bloqueo evita que dos pasadas del trabajador procesen el mismo video a la vez. Los archivos recién sincronizados esperan antes de leerse.
 
-`visual.py` conserva `.local-state/jobs/ID/visual.json` y los frames de Watch Skill en `watch/`; los reintentos reutilizan esas imágenes. Se fijan los primeros segundos y Watch Skill selecciona escenas del resto del video con un máximo configurable. Si hay subtítulos, se reutilizan; si no, el extractor existente transcribe el video adquirido. Los videos sin audio pueden generar una skill basada en imágenes. El modelo inicial de audio es `whisper_model`. `review_whisper_model` es opcional y solo se usa cuando el análisis clasifica el problema como transcripción. Si el segundo modelo contradice un `needs_review` con `not_skillable`, el caso sigue pendiente en vez de descartarse. Un usuario puede corregir `transcript.txt` y usar `retry ID --use-transcript` sin volver a descargar el Reel. Los intentos antiguos quedan conservados.
+La generación separa mapa de enseñanzas, redacción y revisión de fidelidad. Ante una pérdida sustancial, permite una corrección y una nueva revisión; si persiste, deja el caso en `needs_review`. `retry ID --refresh-draft` reutiliza la evidencia local, conserva la versión previa en `history/` y solo reemplaza el borrador privado si la nueva generación es apta.
 
 ## Límites de confianza
 
-La generación usa tres llamadas: mapa con tesis, formato, enseñanzas y evidencia; skill redactada desde ese mapa; revisión independiente que compara cobertura, distorsiones y adaptaciones. Ante un fallo de fidelidad, se permite una corrección y una nueva revisión. Si persiste, el resultado queda en `needs_review` sin actualizar el PR. `result.json` conserva el mapa y el veredicto; `history/` conserva versiones previas de una regeneración.
+Video, subtítulos, OCR y transcripción son material externo. Los prompts indican que no deben obedecerse instrucciones dentro de ese material. Las citas de evidencia se validan contra marcas de tiempo entregadas, pero esto no certifica que el OCR o las recomendaciones del creador sean correctas. El usuario revisa el borrador antes de activarlo.
 
-`core.generate(..., task_intent=...)` permite orientar una generación manual hacia un objetivo explícito, como extraer técnicas de diseño de un video que muestra una interfaz de otro dominio. La intención viaja al mapa y a la redacción; no sustituye la evidencia visual. La entrada automática de enlaces `.txt` sigue aceptando Reels de Instagram; para un post de Threads, se debe aportar un archivo de video local a la carpeta o resolver su medio por separado antes de analizarlo con Watch Skill.
+La prueba usa un espacio temporal y el modo `workspace-write` de Codex; el evaluador posterior es de solo lectura. El sandbox limita las escrituras, pero no equivale a una máquina virtual aislada de lecturas. Cada informe se ata al SHA-256 del `SKILL.md` local; si el borrador cambia, requiere otra prueba. La activación exige una prueba terminada para esa versión y una confirmación humana de los vacíos. Copia a la biblioteca aprobada y después a las carpetas locales de agentes; no realiza llamadas a GitHub.
 
-Un enlace o video, sus subtítulos, OCR, imágenes y transcripción son material externo. El generador recibe instrucciones para no obedecer órdenes dentro de ese material. La validación comprueba la estructura de la skill y que cada cita de audio o visual corresponda a una marca de tiempo realmente entregada. Esto no demuestra que el OCR sea correcto ni que una recomendación del creador sea válida: el PR queda como borrador para revisión humana.
-
-Si el usuario subió un archivo, el video original permanece en Drive. Las transcripciones, frames, OCR y análisis completos quedan en `.local-state/` del computador, que Git ignora; la transcripción, el OCR y los frames seleccionados se envían a Codex para analizarlos. El repositorio público recibe únicamente la skill y un resumen de fuente con evidencias, nunca el video, los frames ni la transcripción completa. Para videos locales, la fuente pública muestra su SHA-256 sin revelar la ruta del archivo. Watch Skill se usa mediante su API Python; no requiere DeepWatch, Node, MCP ni una cuenta adicional.
-
-La elección de un solo trabajador y archivos JSON evita exigir Docker o un servicio externo. A cambio, el computador debe estar encendido y Drive sincronizado. La comprobación de PR existente evita duplicados normales; si GitHub tiene una rama sin PR, se detiene para revisión manual en vez de sobrescribirla.
+El computador debe estar encendido y Drive sincronizado. Los videos y enlaces pueden fallar por acceso, formato o permisos del origen. El repositorio compartido no contiene skills, fuentes personales ni el informe histórico de pruebas de un usuario.
