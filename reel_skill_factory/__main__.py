@@ -12,7 +12,7 @@ from .doctor import diagnose
 from .worker import ProcessOptions, print_status, process_inbox
 from .vault import write_vault
 from .vault_server import serve
-from .lifecycle import activate, evaluate
+from .lifecycle import activate, evaluate, sync_approved
 from .worker import JOBS_DIR, STATE_DIR, load_state
 
 
@@ -44,6 +44,8 @@ def main() -> int:
     activation.add_argument("item_id")
     activation.add_argument("--target", type=Path, action="append", help="carpeta adicional de skills del agente")
     activation.add_argument("--accept-gaps", action="store_true", help="confirmo que revisé los vacíos del evaluador")
+    synchronize = sub.add_parser("sync-skills", help="instala skills integradas del repositorio en el agente local")
+    synchronize.add_argument("--target", type=Path, action="append", help="carpeta de skills del agente")
     sub.add_parser("watch", help="vigila la carpeta mientras este proceso esté abierto")
     args = parser.parse_args()
     if args.command == "doctor":
@@ -64,6 +66,10 @@ def main() -> int:
         for path in activate(load_config(args.config), args.item_id, targets=args.target,
                              accept_gaps=args.accept_gaps):
             print(path)
+        return 0
+    if args.command == "sync-skills":
+        installed = sync_approved(targets=args.target)
+        print(f"{len(installed)} instalaciones verificadas" if installed else "No hay skills integradas todavía")
         return 0
     if args.command == "retry":
         if args.use_transcript and args.model:

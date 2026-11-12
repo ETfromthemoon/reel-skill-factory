@@ -14,7 +14,7 @@ Teléfono → Drive → carpeta local
   → lifecycle.py: prueba temporal, evaluación y promoción explícita
 ```
 
-`__main__.py` define los comandos `doctor`, `once`, `watch`, `status`, `vault`, `retry`, `evaluate` y `activate`. `doctor.py` revisa el equipo y las integraciones. `config.local.json` contiene la ruta y las preferencias locales; está ignorado por Git.
+`__main__.py` define los comandos `doctor`, `once`, `watch`, `status`, `vault`, `retry`, `evaluate`, `activate` y `sync-skills`. `doctor.py` revisa el equipo y las integraciones. `sync-skills` instala el catálogo integrado en carpetas locales de agentes y registra hashes en `.local-state/installed-skills.json` para preservar ediciones del usuario. `config.local.json` contiene la ruta y las preferencias locales; está ignorado por Git.
 
 ## Estado y recuperación
 

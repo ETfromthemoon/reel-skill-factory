@@ -11,7 +11,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .core import Config, WorkflowError, run
+from .core import ROOT, Config, WorkflowError, run
 from .worker import JOBS_DIR, STATE_DIR, load_state
 
 
@@ -73,6 +73,53 @@ def _codex_env() -> dict[str, str]:
             env["PATH"] = str(candidates[0].parent) + os.pathsep + env.get("PATH", "")
             return env
     raise WorkflowError("No se encontró Codex CLI para evaluar la skill")
+
+
+def sync_approved(*, source_root: Path = ROOT, targets: list[Path] | None = None) -> list[Path]:
+    """Install skills already integrated in this checkout without overwriting user edits."""
+    catalog = source_root / "skills"
+    if not catalog.exists():
+        return []
+    if not catalog.is_dir() or catalog.is_symlink():
+        raise WorkflowError("El catálogo skills/ no es una carpeta normal")
+    destinations = targets or [Path.home() / ".codex" / "skills", Path.home() / ".agents" / "skills"]
+    manifest_path = source_root / ".local-state" / "installed-skills.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
+    except (OSError, ValueError) as exc:
+        raise WorkflowError("No se pudo leer el registro de skills instaladas") from exc
+    if not isinstance(manifest, dict):
+        raise WorkflowError("Registro de skills instaladas inválido")
+    planned = []
+    for folder in sorted(catalog.iterdir()):
+        if folder.is_symlink() or not folder.is_dir() or not SKILL_PATH.fullmatch(f"skills/{folder.name}/SKILL.md"):
+            raise WorkflowError(f"Carpeta de skill inválida: {folder.name}")
+        source = folder / "SKILL.md"
+        if not source.is_file() or source.is_symlink():
+            raise WorkflowError(f"Falta SKILL.md válido en {folder.name}")
+        content = source.read_text(encoding="utf-8")
+        if not content.startswith(f"---\nname: {folder.name}\ndescription: "):
+            raise WorkflowError(f"Frontmatter inválido en {folder.name}")
+        for root in destinations:
+            target = root.expanduser() / folder.name / "SKILL.md"
+            if target.parent.is_symlink() or target.is_symlink():
+                raise WorkflowError(f"Destino enlazado no admitido: {target}")
+            previous_hash = manifest.get(str(target))
+            if target.exists():
+                existing = target.read_text(encoding="utf-8")
+                if existing != content and hashlib.sha256(existing.encode()).hexdigest() != previous_hash:
+                    raise WorkflowError(f"La skill local fue modificada: {target}; no se reemplazó")
+            planned.append((target, content))
+    installed = []
+    for target, content in planned:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_suffix(".tmp")
+        temporary.write_text(content, encoding="utf-8")
+        temporary.replace(target)
+        manifest[str(target)] = hashlib.sha256(content.encode()).hexdigest()
+        installed.append(target)
+    _write_json(manifest_path, manifest)
+    return installed
 
 
 def _judge(trial: Path, scenario: str, expected: str, answer: str, files: dict) -> dict:
