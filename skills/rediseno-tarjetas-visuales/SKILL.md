@@ -1,23 +1,40 @@
 ---
 name: rediseno-tarjetas-visuales
-description: "Invoca esta skill al revisar o rediseñar una tarjeta de reserva, producto o perfil, o un formulario breve de suscripción. Úsala para dar protagonismo a una imagen relevante, ordenar la información y distinguir la acción principal."
+description: "Invoca esta skill al revisar una tarjeta de reserva, producto o perfil, o un formulario de suscripción. Usa cuatro comparaciones antes y después para decidir qué papel cumple la imagen, qué información se superpone y cómo se distingue la acción principal."
 ---
 
-## Entradas
+# Rediseñar tarjetas y formularios con imagen y jerarquía visual
 
-Trabaja con la captura o el componente actual, la acción principal y los datos que el usuario necesita para decidir. Pide el material que falte si impide evaluar la tarjeta. Si la acción principal es ambigua, confirma cuál debe destacar antes de cambiar su jerarquía.
+Usa la comparación que corresponda al componente. Si revisas varios, sigue este orden. En cada caso, identifica el problema en la versión actual y muestra cómo cambia la composición en la propuesta.
 
-## Diagnóstico y rediseño
+**Adaptación editorial · Preparar la revisión.** Reúne la versión actual, la imagen disponible, los datos que deben conservarse, las acciones y el objetivo del componente. Pide solo los datos imprescindibles que falten. Si dos acciones compiten, usa el objetivo del componente para decidir cuál debe tener mayor peso.
 
-1. Identifica qué debe entender el usuario antes de actuar. Marca qué elementos compiten con la acción principal, qué información es imprescindible y qué aporta la imagen a la decisión.
-2. Si la imagen ayuda a entender la oferta o reconocer al sujeto, amplíala hasta los bordes de la tarjeta o úsala como fondo. Ajusta el encuadre para mantener visible lo importante. Coloca los detalles sobre una zona tranquila de la imagen y añade un degradado o una superficie de apoyo si hace falta. Si el encuadre y el contraste siguen fallando, separa la imagen del texto.
-3. Dale a la acción principal mayor peso mediante tamaño, contraste y posición. Mantén disponibles las acciones secundarias necesarias con menor énfasis.
-4. Adapta el patrón al componente.
-   - **Reserva:** usa la foto del destino como fondo, agrupa nombre y precio y destaca «Reservar». Si también existe un carrito, reduce el peso visual de esa acción.
-   - **Producto:** amplía la foto para que se distinga el producto y conserva el precio y los datos que ayudan a decidir. Destaca «Añadir al carrito» si ese es el objetivo y deja «Vista rápida» como acción secundaria.
-   - **Suscripción:** elige una foto que muestre el tipo de contenido que recibirá la persona. Escribe un titular con un beneficio concreto, indica qué llegará y con qué frecuencia si se conoce, y usa un botón coherente con esa promesa. Conserva el campo de correo y el acceso a la política de privacidad cuando corresponda.
-   - **Perfil:** da protagonismo al retrato. Agrupa nombre, descripción y métricas relevantes en una zona legible. Destaca el contacto y reduce el peso de «Guardar» cuando el objetivo principal sea iniciar una conversación.
+## 1. Tarjeta de reserva de viajes
 
-## Verificación y entrega
+**Antes.** En Deep Blue Highs, la foto del destino está enmarcada dentro de una tarjeta blanca. Dos botones contiguos y de colores distintos compiten por la atención.
 
-Compara ambas versiones con el mismo contenido. Comprueba si se identifica de un vistazo la oferta o la persona, se encuentran los datos necesarios y se distingue la acción principal. Revisa el recorte y el contraste en los tamaños previstos, con fotos claras y oscuras y con textos largos. Si la propuesta se implementa, verifica el foco de teclado, las etiquetas de los controles y que las acciones sigan funcionando. Entrega el rediseño con los cambios clave y las comprobaciones realizadas. Para afirmar una mejora de conversión, exige datos de uso o una prueba comparativa.
+**Después.** Extiende la foto del destino hasta los bordes de la tarjeta e integra la información en la misma composición. Mantén el destino y el precio reconocibles. Da a «Book Now» el ancho útil de la tarjeta y deja «Add to Cart» debajo, con menos peso visual.
+
+## 2. Tarjeta de producto
+
+**Antes.** En Nebula Pro Headphones, la foto está en un recuadro superior separado de la descripción, la valoración, el precio y las acciones.
+
+**Después.** Agranda los auriculares e integra su foto como fondo de la tarjeta. Coloca el nombre, la descripción, la valoración, el precio actual y anterior, el descuento y las acciones sobre un degradado oscuro en la zona inferior. Conserva «Add to Cart» y «Quick View» como botones. La variante usa relleno para el primero y contorno para el segundo.
+
+## 3. Formulario de suscripción
+
+**Antes.** El formulario anuncia una newsletter semanal con un titular genérico y un botón «Subscribe Now!».
+
+**Después.** Usa una foto que muestre el estilo de vida asociado al contenido. En el ejemplo, una persona luce un atuendo, «Dress Better Every Week» expresa el beneficio, el texto explica que llegarán ideas de atuendos cada semana y «Get Weekly Outfit Inspo» lleva esa promesa al botón. Conserva el campo de correo.
+
+**Adaptación editorial · Redactar la promesa.** Identifica qué recibe la audiencia, para qué le sirve y con qué frecuencia, cuando la cadencia esté confirmada. Expresa el beneficio en el titular, concreta la entrega en el texto de apoyo y nombra en el botón lo que la persona recibirá.
+
+## 4. Tarjeta de perfil personal
+
+**Antes.** En la tarjeta de Natasha Romanoff, el retrato está enmarcado arriba, la información ocupa un panel blanco y guardar aparece sobre una esquina de la foto.
+
+**Después.** Amplía el retrato para que domine la tarjeta. Superpone el nombre, la descripción, la valoración, los ingresos y la tarifa en la zona inferior oscurecida. Mantén «Get In Touch» como acción principal y coloca el control de guardar a su lado.
+
+## Verificar la propuesta
+
+**Adaptación editorial.** Compara el antes y el después en los tamaños previstos. Ajusta el recorte para mantener visible el motivo principal y revisa la posición del texto y la intensidad del degradado donde haga falta. Comprueba que los datos, los campos y los controles se distinguen sobre la imagen, que la acción principal se identifica a simple vista y que las acciones secundarias siguen disponibles con el tratamiento de su caso. En el formulario, verifica que imagen, titular, texto y botón comuniquen el mismo beneficio. Si hay un prototipo interactivo, comprueba los controles modificados. Entrega la comparación antes y después e indica qué comprobaste.
