@@ -43,15 +43,15 @@ Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger @($trigger, 
 if (-not $existing) { Start-ScheduledTask -TaskName $TaskName }
 & $venvPython -m reel_skill_factory vault | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'No se pudo crear la bóveda local.' }
-$vaultPath = Join-Path $repoRoot '.local-state\vault.html'
+$vaultUrl = 'http://127.0.0.1:8766/'
 $shell = New-Object -ComObject WScript.Shell
 foreach ($folder in @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('Startup'))) {
     $shortcut = $shell.CreateShortcut((Join-Path $folder 'Bóveda de Skills.lnk'))
     $shortcut.TargetPath = Join-Path $env:WINDIR 'explorer.exe'
-    $shortcut.Arguments = '"' + $vaultPath + '"'
+    $shortcut.Arguments = $vaultUrl
     $shortcut.WorkingDirectory = $repoRoot
     $shortcut.Description = 'Abrir la bóveda local de skills'
     $shortcut.Save()
 }
 Write-Host "Tarea '$TaskName' instalada para $identity. Procesará la carpeta cada 5 minutos mientras la sesión esté abierta."
-Write-Host "Bóveda local: $vaultPath (acceso directo en el escritorio; se abre al iniciar sesión)."
+Write-Host "Bóveda local: $vaultUrl (acceso directo en el escritorio; se abre al iniciar sesión)."

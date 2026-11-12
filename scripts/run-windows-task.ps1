@@ -29,6 +29,38 @@ if (-not $codexPath) {
     [System.IO.File]::AppendAllText($logPath, "$(Get-Date -Format o) No se encontró codex.exe para la tarea programada`r`n")
     exit 1
 }
+$env:PATH = (Split-Path -Parent $codexPath) + [IO.Path]::PathSeparator + $env:PATH
+
+$vaultPidPath = Join-Path $stateDir 'vault-server.pid'
+$vaultProcess = $null
+if (Test-Path -LiteralPath $vaultPidPath) {
+    $oldPid = [System.IO.File]::ReadAllText($vaultPidPath).Trim()
+    if ($oldPid -match '^\d+$') {
+        $vaultProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $oldPid" -ErrorAction SilentlyContinue
+        if ($vaultProcess -and $vaultProcess.CommandLine -notlike '*reel_skill_factory vault --serve*') {
+            $vaultProcess = $null
+        }
+        if ($vaultProcess) {
+            $childPids = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $oldPid" -ErrorAction SilentlyContinue |
+                Select-Object -ExpandProperty ProcessId)
+            $listener = Get-NetTCPConnection -LocalPort 8766 -State Listen -ErrorAction SilentlyContinue |
+                Where-Object { $_.OwningProcess -eq $vaultProcess.ProcessId -or $childPids -contains $_.OwningProcess }
+            if (-not $listener) { $vaultProcess = $null }
+        }
+    }
+}
+if (-not $vaultProcess) {
+    try {
+        $vault = Start-Process -FilePath $python -ArgumentList '-m reel_skill_factory vault --serve' `
+            -WorkingDirectory $repoRoot -WindowStyle Hidden -PassThru `
+            -RedirectStandardOutput (Join-Path $stateDir 'vault-server.out.log') `
+            -RedirectStandardError (Join-Path $stateDir 'vault-server.err.log')
+        [System.IO.File]::WriteAllText($vaultPidPath, [string]$vault.Id)
+        [System.IO.File]::AppendAllText($logPath, "$(Get-Date -Format o) Bóveda PID=$($vault.Id)`r`n")
+    } catch {
+        [System.IO.File]::AppendAllText($logPath, "$(Get-Date -Format o) No se pudo iniciar bóveda: $($_.Exception.Message)`r`n")
+    }
+}
 
 $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
 $startInfo.FileName = $python

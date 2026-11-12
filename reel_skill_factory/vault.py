@@ -8,7 +8,7 @@ from html import escape
 from pathlib import Path
 
 
-STYLE = """body{font:16px system-ui,sans-serif;max-width:980px;margin:36px auto;padding:0 20px;background:#f7f6f2;color:#20232b}h1{font-size:2rem}p{line-height:1.5}.grid{display:grid;gap:18px}.card{background:white;border:1px solid #ddd;border-radius:16px;padding:22px;box-shadow:0 2px 10px #0001}.meta{color:#626873;font-size:.9rem}.badge{display:inline-block;background:#e7f4ec;color:#176438;border-radius:99px;padding:4px 10px}a{color:#185caa}details{margin-top:14px;border-top:1px solid #eee;padding-top:12px}summary{cursor:pointer;font-weight:650}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.5 ui-monospace,monospace;background:#f5f5f5;padding:16px;border-radius:10px}img{max-width:180px;max-height:130px;object-fit:cover;border-radius:8px;float:right;margin:0 0 12px 16px}@media(max-width:600px){img{float:none;display:block;margin:0 0 12px}}"""
+STYLE = """body{font:16px system-ui,sans-serif;max-width:980px;margin:36px auto;padding:0 20px;background:#f7f6f2;color:#20232b}h1{font-size:2rem}p{line-height:1.5}.grid{display:grid;gap:18px}.card{background:white;border:1px solid #ddd;border-radius:16px;padding:22px;box-shadow:0 2px 10px #0001}.meta{color:#626873;font-size:.9rem}.badge{display:inline-block;background:#e7f4ec;color:#176438;border-radius:99px;padding:4px 10px}a{color:#185caa}details{margin-top:14px;border-top:1px solid #eee;padding-top:12px}summary{cursor:pointer;font-weight:650}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.5 ui-monospace,monospace;background:#f5f5f5;padding:16px;border-radius:10px}img{max-width:180px;max-height:130px;object-fit:cover;border-radius:8px;float:right;margin:0 0 12px 16px}form{clear:both;margin:16px 0;padding:14px;border:1px solid #ddd;border-radius:10px}label{display:block;margin:8px 0;font-weight:600}textarea{display:block;width:100%;min-height:64px;box-sizing:border-box;margin-top:5px;font:inherit}button{background:#176438;color:white;border:0;border-radius:8px;padding:10px 14px;cursor:pointer}@media(max-width:600px){img{float:none;display:block;margin:0 0 12px}}"""
 STATUS_LABELS = {"published": "Borrador listo", "processing": "Procesando", "failed": "Error",
                  "needs_review": "Requiere revisión", "not_skillable": "Sin skill reutilizable",
                  "skillable": "Creando borrador"}
@@ -18,7 +18,8 @@ def _text(value: object) -> str:
     return escape(str(value or ""), quote=True)
 
 
-def render_vault(state: dict, jobs_dir: Path, state_dir: Path) -> str:
+def render_vault(state: dict, jobs_dir: Path, state_dir: Path, *, token: str | None = None,
+                 activity: dict | None = None) -> str:
     cards = []
     for item_id, record in sorted(state.items(), reverse=True):
         if not isinstance(item_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", item_id) or not isinstance(record, dict):
@@ -33,13 +34,41 @@ def render_vault(state: dict, jobs_dir: Path, state_dir: Path) -> str:
             except (OSError, ValueError):
                 pass
         title = _text(result.get("title") or item_id)
-        status = _text(STATUS_LABELS.get(record.get("status"), "Pendiente"))
+        activated = (jobs_dir / item_id / "activation.json").exists()
+        status = "Activa" if activated else _text(STATUS_LABELS.get(record.get("status"), "Pendiente"))
         description = _text(result.get("description") or record.get("error") or "En proceso o pendiente de revisión.")
         pr = record.get("pr", "")
         link = (f'<p><a href="{_text(pr)}" target="_blank" rel="noopener noreferrer">Abrir borrador en GitHub ↗</a></p>'
                 if isinstance(pr, str) and pr.startswith("https://github.com/") else "")
         if record.get("status") == "needs_review" and link:
             link += '<p class="meta">El PR conserva la versión anterior; esta regeneración necesita revisión.</p>'
+        if token and record.get("status") == "published" and not activated:
+            activity_text = (activity or {}).get(item_id)
+            if activity_text:
+                link += f'<p class="meta">{_text(activity_text)}</p>'
+            link += (f'<form method="post" action="/action"><input type="hidden" name="token" value="{_text(token)}">'
+                     f'<input type="hidden" name="item_id" value="{_text(item_id)}">'
+                     '<label>Caso de prueba<textarea name="scenario" minlength="20" maxlength="2000" required '
+                     'placeholder="Describe una interfaz o tarea concreta"></textarea></label>'
+                     '<label>Resultado esperado<textarea name="expected" minlength="20" maxlength="2000" required '
+                     'placeholder="Qué debería cambiar y qué debería conservarse"></textarea></label>'
+                     '<button name="action" value="evaluate">Probar en entorno aislado</button></form>')
+            report_dir = jobs_dir / item_id / "evaluations"
+            reports = sorted(report_dir.glob("*/report.json")) if report_dir.is_dir() else []
+            if reports:
+                try:
+                    report = json.loads(reports[-1].read_text(encoding="utf-8"))
+                    link += f'<details><summary>Última prueba: {_text(report.get("status"))}</summary>'
+                    link += f'<pre>{_text(json.dumps(report, ensure_ascii=False, indent=2))}</pre></details>'
+                    if report.get("status") == "review" and not activated:
+                        link += (f'<form method="post" action="/action"><input type="hidden" name="token" value="{_text(token)}">'
+                                 f'<input type="hidden" name="item_id" value="{_text(item_id)}">'
+                                 '<label><input type="checkbox" name="confirm" value="yes" required> Revisé la prueba y sus vacíos</label>'
+                                 '<button name="action" value="activate">Activar: fusionar PR e instalar</button></form>')
+                except (OSError, ValueError):
+                    pass
+        if activated:
+            link += '<p class="badge">Integrada e instalada localmente</p>'
         skill = result.get("instructions_md", "")
         details = ""
         if skill:
@@ -66,7 +95,7 @@ def render_vault(state: dict, jobs_dir: Path, state_dir: Path) -> str:
             details += f'<details><summary>Evidencia del video ({len(evidence)})</summary><pre>{_text(lines)}</pre></details>'
         preview = ""
         visual_path = jobs_dir / item_id / "visual.json"
-        if visual_path.is_file():
+        if visual_path.is_file() and token is None:
             try:
                 visual = json.loads(visual_path.read_text(encoding="utf-8"))
                 frames = visual.get("frames", []) if isinstance(visual, dict) else []
@@ -80,10 +109,10 @@ def render_vault(state: dict, jobs_dir: Path, state_dir: Path) -> str:
     content = "\n".join(cards) if cards else "<p>Aún no hay videos procesados.</p>"
     return ('<!doctype html><html lang="es"><meta charset="utf-8"><meta http-equiv="refresh" content="30">'
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
-            '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src file:; style-src \'unsafe-inline\'">'
+            '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src file:; style-src \'unsafe-inline\'; form-action \'self\'">'
             f'<title>Bóveda de skills</title><style>{STYLE}</style><main><h1>Bóveda de skills</h1>'
             '<p>Skills y análisis guardados en este computador. La página se actualiza cada 30 segundos. '
-            'Los borradores requieren revisión antes de fusionarse en GitHub.</p>'
+            'Las pruebas se hacen en un directorio temporal; revisa sus archivos antes de activar.</p>'
             f'<div class="grid">{content}</div></main></html>')
 
 
