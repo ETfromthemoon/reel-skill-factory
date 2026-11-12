@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "summary", "evidence", "gaps"],
+  "properties": {
+    "verdict": {"type": "string", "enum": ["pass", "review"]},
+    "summary": {"type": "string"},
+    "evidence": {"type": "array", "items": {"type": "string"}},
+    "gaps": {"type": "array", "items": {"type": "string"}}
+  }
+}

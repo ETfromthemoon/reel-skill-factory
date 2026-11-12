@@ -39,6 +39,20 @@ class VaultTests(unittest.TestCase):
             html = render_vault({"../outside": {"status": "published"}}, root / "jobs", root)
             self.assertNotIn("../outside", html)
 
+    def test_interactive_vault_shows_review_gate_and_escapes_report(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            report = root / "jobs" / "ABC123" / "evaluations" / "trial" / "report.json"
+            report.parent.mkdir(parents=True)
+            report.write_text('{"status":"review","judgment":{"verdict":"review",'
+                              '"summary":"<script>","gaps":["Sin navegador"]}}', encoding="utf-8")
+            html = render_vault({"ABC123": {"status": "published"}}, root / "jobs", root,
+                                token="local-token")
+            self.assertIn("Probar en entorno aislado", html)
+            self.assertIn("Revisé la prueba", html)
+            self.assertIn("Sin navegador", html)
+            self.assertNotIn("<script>", html)
+
 
 if __name__ == "__main__":
     unittest.main()

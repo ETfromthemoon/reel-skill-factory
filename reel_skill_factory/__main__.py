@@ -11,6 +11,8 @@ from .core import ROOT, WorkflowError, load_config
 from .doctor import diagnose
 from .worker import ProcessOptions, print_status, process_inbox
 from .vault import write_vault
+from .vault_server import serve
+from .lifecycle import activate, evaluate
 from .worker import JOBS_DIR, STATE_DIR, load_state
 
 
@@ -32,7 +34,16 @@ def main() -> int:
                        help="regenera un PR en borrador usando transcripción y frames guardados")
     status = sub.add_parser("status", help="muestra resultados y rutas de revisión")
     status.add_argument("item_id", nargs="?")
-    sub.add_parser("vault", help="actualiza la bóveda HTML local y muestra su ruta")
+    vault = sub.add_parser("vault", help="actualiza o abre la bóveda local")
+    vault.add_argument("--serve", action="store_true", help="bóveda interactiva en 127.0.0.1:8766")
+    evaluation = sub.add_parser("evaluate", help="prueba un borrador en un directorio temporal")
+    evaluation.add_argument("item_id")
+    evaluation.add_argument("--scenario", required=True)
+    evaluation.add_argument("--expected", required=True)
+    activation = sub.add_parser("activate", help="fusiona e instala una skill evaluada")
+    activation.add_argument("item_id")
+    activation.add_argument("--target", type=Path, action="append", help="carpeta adicional de skills del agente")
+    activation.add_argument("--accept-gaps", action="store_true", help="confirmo que revisé los vacíos del evaluador")
     sub.add_parser("watch", help="vigila la carpeta mientras este proceso esté abierto")
     args = parser.parse_args()
     if args.command == "doctor":
@@ -41,7 +52,18 @@ def main() -> int:
         print_status(args.item_id)
         return 0
     if args.command == "vault":
+        if args.serve:
+            serve(args.config)
+            return 0
         print(write_vault(load_state(), JOBS_DIR, STATE_DIR))
+        return 0
+    if args.command == "evaluate":
+        print(evaluate(load_config(args.config), args.item_id, args.scenario, args.expected))
+        return 0
+    if args.command == "activate":
+        for path in activate(load_config(args.config), args.item_id, targets=args.target,
+                             accept_gaps=args.accept_gaps):
+            print(path)
         return 0
     if args.command == "retry":
         if args.use_transcript and args.model:

@@ -1,6 +1,6 @@
 # Arquitectura del flujo
 
-El producto usa un solo proceso Python en el computador del usuario. Drive para escritorio sincroniza una carpeta; no hay servidor, base de datos ni credenciales de Google dentro del trabajador.
+El producto usa un trabajador Python y, para la revisión interactiva, un servidor HTTP local ligado a `127.0.0.1`. Drive para escritorio sincroniza una carpeta; no hay servidor remoto, base de datos ni credenciales de Google dentro del trabajador.
 
 ```text
 Teléfono → Drive → carpeta local
@@ -10,10 +10,11 @@ Teléfono → Drive → carpeta local
   → extraer_transcripcion.py: FFmpeg/Whisper si no hay subtítulos
   → core.py + Codex: mapa de enseñanzas, skill y revisión de fidelidad
   → core.py + Git/GitHub CLI: rama y draft PR (solo si es apto)
-  → vault.py: bóveda HTML local de solo lectura, actualizada con cada estado
+  → vault.py/vault_server.py: bóveda local y controles de prueba/activación
+  → lifecycle.py: prueba temporal, evaluación y promoción explícita
 ```
 
-`__main__.py` define los comandos `doctor`, `once`, `watch`, `status`, `vault` y `retry`. `doctor.py` revisa el equipo y las integraciones. `config.local.json` contiene la ruta y las preferencias locales; está ignorado por Git.
+`__main__.py` define los comandos `doctor`, `once`, `watch`, `status`, `vault`, `retry`, `evaluate` y `activate`. `doctor.py` revisa el equipo y las integraciones. `config.local.json` contiene la ruta y las preferencias locales; está ignorado por Git.
 
 ## Estado y recuperación
 
