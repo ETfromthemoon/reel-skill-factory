@@ -1,0 +1,19 @@
+{
+  "type": "object", "additionalProperties": false,
+  "required": ["thesis", "audience", "format", "promised_count", "lessons", "gaps", "unproven_claims", "editorial_needs"],
+  "properties": {
+    "thesis": {"type": "string"}, "audience": {"type": "string"},
+    "format": {"type": "string", "enum": ["sequence", "list", "comparison", "demonstration", "independent_tips", "other"]},
+    "promised_count": {"type": ["integer", "null"]},
+    "lessons": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+      "required": ["id", "point", "basis", "evidence"],
+      "properties": {"id": {"type": "string"}, "point": {"type": "string"},
+        "basis": {"type": "string", "enum": ["explicit", "inferred"]},
+        "evidence": {"type": "array", "items": {"type": "object", "additionalProperties": false,
+          "required": ["timestamp", "modality", "finding"],
+          "properties": {"timestamp": {"type": "string"}, "modality": {"type": "string", "enum": ["audio", "visual"]}, "finding": {"type": "string"}}}}}}},
+    "gaps": {"type": "array", "items": {"type": "string"}},
+    "unproven_claims": {"type": "array", "items": {"type": "string"}},
+    "editorial_needs": {"type": "array", "items": {"type": "string"}}
+  }
+}

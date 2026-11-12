@@ -38,12 +38,27 @@ def render_vault(state: dict, jobs_dir: Path, state_dir: Path) -> str:
         pr = record.get("pr", "")
         link = (f'<p><a href="{_text(pr)}" target="_blank" rel="noopener noreferrer">Abrir borrador en GitHub ↗</a></p>'
                 if isinstance(pr, str) and pr.startswith("https://github.com/") else "")
+        if record.get("status") == "needs_review" and link:
+            link += '<p class="meta">El PR conserva la versión anterior; esta regeneración necesita revisión.</p>'
         skill = result.get("instructions_md", "")
         details = ""
         if skill:
             details += f'<details><summary>Leer skill</summary><pre>{_text(skill)}</pre></details>'
         if result.get("analysis"):
             details += f'<details><summary>Por qué se creó</summary><pre>{_text(result["analysis"])}</pre></details>'
+        source_map = result.get("source_map")
+        if isinstance(source_map, dict):
+            lessons = source_map.get("lessons") or []
+            lines = [f'Tesis: {source_map.get("thesis", "")}', '']
+            lines += [f'{e.get("id", "")}: {e.get("point", "")} ({e.get("basis", "")})'
+                      for e in lessons if isinstance(e, dict)]
+            details += f'<details><summary>Qué enseñaba el video</summary><pre>{_text(chr(10).join(lines))}</pre></details>'
+        review = result.get("fidelity_review")
+        if isinstance(review, dict):
+            lines = [f'Veredicto: {review.get("verdict", "")}', str(review.get("summary", ""))]
+            lines += [f'Pendiente: {x}' for x in review.get("issues", [])]
+            lines += [f'Añadido para aplicar la skill: {x}' for x in review.get("editorial_additions", [])]
+            details += f'<details><summary>Contraste y adaptaciones</summary><pre>{_text(chr(10).join(lines))}</pre></details>'
         evidence = result.get("evidence") or []
         if evidence:
             lines = "\n".join(f'{e.get("timestamp", "")} · {e.get("modality", "audio")} · {e.get("finding", "")}'

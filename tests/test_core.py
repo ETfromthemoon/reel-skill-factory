@@ -6,7 +6,8 @@ from unittest.mock import patch
 
 from reel_skill_factory.core import (
     WorkflowError, find_reel_url, generate, load_config, normalize_reel_url,
-    skill_markdown, source_markdown, validate_generation,
+    skill_markdown, source_markdown, validate_fidelity, validate_generation,
+    validate_source_map,
 )
 
 
@@ -114,17 +115,95 @@ class GenerationTests(unittest.TestCase):
                                   "image": str(frame)}]}
             self.result["evidence"] = [{"timestamp": "[00:02]", "modality": "visual",
                                         "finding": "Error visual visible"}]
+            source_map = {"thesis": "El video enseña a reconocer un error visual en una interfaz.",
+                          "audience": "Diseñadores", "format": "demonstration", "promised_count": None,
+                          "lessons": [{"id": "L1", "point": "Reconocer el error visual", "basis": "explicit",
+                                       "evidence": self.result["evidence"]}],
+                          "gaps": [], "unproven_claims": [], "editorial_needs": []}
+            review = {"verdict": "pass", "covered_ids": ["L1"], "issues": [],
+                      "editorial_additions": [], "summary": "La skill conserva la enseñanza."}
 
             def fake_run(command, **kwargs):
                 output = Path(command[command.index("--output-last-message") + 1])
-                output.write_text(json.dumps(self.result), encoding="utf-8")
-                self.assertEqual(command[command.index("--image") + 1], str(frame))
-                self.assertEqual(command[-2:], ["--image", str(frame)])
-                self.assertIn('"ocr_text": "Error visual"', kwargs["input_text"])
+                value = (source_map if output.name == "source-map.json" else
+                         review if output.name == "fidelity.json" else self.result)
+                output.write_text(json.dumps(value), encoding="utf-8")
+                if output.name != "fidelity.json":
+                    self.assertEqual(command[command.index("--image") + 1], str(frame))
+                    self.assertEqual(command[-2:], ["--image", str(frame)])
+                    self.assertIn('"ocr_text": "Error visual"', kwargs["input_text"])
 
             with patch("reel_skill_factory.core.run", side_effect=fake_run):
-                self.assertEqual(generate("video de prueba", {"transcripcion": "",
-                                 "duracion_seg": 5}, workdir, visual=visual)["status"], "skillable")
+                generated = generate("video de prueba", {"transcripcion": "",
+                                     "duracion_seg": 5}, workdir, visual=visual)
+                self.assertEqual(generated["status"], "skillable")
+                self.assertEqual(generated["source_map"]["lessons"][0]["id"], "L1")
+
+    def test_source_map_rejects_missing_evidence_and_unexplained_list_gap(self):
+        source_map = {"thesis": "El video enseña dos pasos para probar una solución.",
+                      "format": "list", "promised_count": 2,
+                      "lessons": [{"id": "L1", "point": "Definir el problema", "basis": "explicit",
+                                   "evidence": self.result["evidence"]}],
+                      "gaps": [], "unproven_claims": [], "editorial_needs": []}
+        with self.assertRaisesRegex(WorkflowError, "incompleta"):
+            validate_source_map(source_map, self.transcript, None)
+        source_map["gaps"] = ["Falta el segundo elemento"]
+        validate_source_map(source_map, self.transcript, None)
+        source_map["lessons"][0]["evidence"][0]["timestamp"] = "[00:59]"
+        with self.assertRaisesRegex(WorkflowError, "ausente"):
+            validate_source_map(source_map, self.transcript, None)
+
+    def test_fidelity_downgrades_pass_with_missing_lessons(self):
+        source_map = {"lessons": [{"id": "L1"}, {"id": "L2"}]}
+        review = {"verdict": "pass", "covered_ids": ["L1"], "issues": [],
+                  "editorial_additions": [], "summary": "Incompleta"}
+        validate_fidelity(review, source_map)
+        self.assertEqual(review["verdict"], "review")
+        self.assertIn("L2", review["issues"][0])
+
+    def test_failed_fidelity_gets_one_revision_before_publication(self):
+        source_map = {"thesis": "El video enseña a definir el problema y luego probar una solución.",
+                      "audience": "Equipos", "format": "sequence", "promised_count": 2,
+                      "lessons": [
+                          {"id": "L1", "point": "Definir el problema", "basis": "explicit",
+                           "evidence": self.result["evidence"]},
+                          {"id": "L2", "point": "Probar una solución", "basis": "explicit",
+                           "evidence": [{"timestamp": "[00:05]", "modality": "audio",
+                                         "finding": "Prueba la solución"}]}],
+                      "gaps": [], "unproven_claims": [], "editorial_needs": []}
+        first_review = {"verdict": "review", "covered_ids": ["L1"],
+                        "issues": ["Falta probar la solución"], "editorial_additions": [],
+                        "summary": "Falta una enseñanza."}
+        final_review = {"verdict": "pass", "covered_ids": ["L1", "L2"],
+                        "issues": [], "editorial_additions": [],
+                        "summary": "Las dos enseñanzas están presentes."}
+        with tempfile.TemporaryDirectory() as temp, \
+             patch("reel_skill_factory.core._model_json", side_effect=[
+                 source_map, self.result.copy(), first_review, self.result.copy(), final_review]) as model:
+            generated = generate("video de prueba", {"transcripcion": self.transcript,
+                                 "duracion_seg": 6}, Path(temp))
+        self.assertEqual(generated["status"], "skillable")
+        self.assertEqual(generated["fidelity_review"]["verdict"], "pass")
+        self.assertEqual([call.args[2] for call in model.call_args_list],
+                         ["source-map.json", "generation.json", "fidelity.json",
+                          "revision.json", "fidelity-revision.json"])
+
+    def test_persistent_fidelity_issue_requires_review(self):
+        source_map = {"thesis": "El video enseña a definir un problema antes de probarlo.",
+                      "audience": "Equipos", "format": "sequence", "promised_count": None,
+                      "lessons": [{"id": "L1", "point": "Definir el problema", "basis": "explicit",
+                                   "evidence": self.result["evidence"]}],
+                      "gaps": [], "unproven_claims": [], "editorial_needs": []}
+        review = {"verdict": "review", "covered_ids": ["L1"],
+                  "issues": ["La skill altera el método"], "editorial_additions": [],
+                  "summary": "La skill altera el método principal."}
+        with tempfile.TemporaryDirectory() as temp, \
+             patch("reel_skill_factory.core._model_json", side_effect=[
+                 source_map, self.result.copy(), review.copy(), self.result.copy(), review.copy()]):
+            generated = generate("video de prueba", {"transcripcion": self.transcript,
+                                 "duracion_seg": 6}, Path(temp))
+        self.assertEqual((generated["status"], generated["review_reason"]),
+                         ("needs_review", "missing_context"))
 
 
 if __name__ == "__main__":

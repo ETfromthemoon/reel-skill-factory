@@ -1,0 +1,11 @@
+{
+  "type": "object", "additionalProperties": false,
+  "required": ["verdict", "covered_ids", "issues", "editorial_additions", "summary"],
+  "properties": {
+    "verdict": {"type": "string", "enum": ["pass", "review"]},
+    "covered_ids": {"type": "array", "items": {"type": "string"}},
+    "issues": {"type": "array", "items": {"type": "string"}},
+    "editorial_additions": {"type": "array", "items": {"type": "string"}},
+    "summary": {"type": "string"}
+  }
+}

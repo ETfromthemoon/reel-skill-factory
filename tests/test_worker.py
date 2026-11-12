@@ -168,6 +168,46 @@ class InboxTests(unittest.TestCase):
         self.assertEqual(saved["status"], "needs_review")
         self.assertIn("No hay una transcripción guardada", saved["retry_error"])
 
+    def test_refresh_draft_uses_saved_evidence_and_preserves_previous_result(self):
+        self.make_old("reel.txt", b"https://www.instagram.com/reel/ABC123/")
+        self.jobs.joinpath("ABC123").mkdir(parents=True)
+        self.state_dir.mkdir(exist_ok=True)
+        old = self.result("skillable") | {"title": "Versión anterior"}
+        (self.jobs / "ABC123" / "result.json").write_text(json.dumps(old), encoding="utf-8")
+        (self.jobs / "ABC123" / "analysis.md").write_text("Análisis previo", encoding="utf-8")
+        worker._save_transcript(self.jobs / "ABC123", self.transcript(), "base")
+        self.state.write_text(json.dumps({"ABC123": {"status": "published", "pr": "https://github.com/test/pull/1"}}),
+                              encoding="utf-8")
+        new = self.result("skillable") | {"title": "Versión nueva"}
+        with patch.object(worker, "transcribe") as transcribe, \
+             patch.object(worker, "generate", return_value=new), \
+             patch.object(worker, "publish", return_value="https://github.com/test/pull/1") as publish:
+            self.assertEqual(worker.process_inbox(self.root / "config.json",
+                             ProcessOptions(target_id="ABC123", refresh_draft=True)), (1, 0))
+        transcribe.assert_not_called()
+        self.assertTrue(publish.call_args.kwargs["update_draft"])
+        history = next((self.jobs / "ABC123" / "history").iterdir())
+        self.assertEqual(json.loads((history / "result.json").read_text(encoding="utf-8"))["title"], "Versión anterior")
+        self.assertEqual(json.loads((self.jobs / "ABC123" / "result.json").read_text(encoding="utf-8"))["title"], "Versión nueva")
+
+    def test_failed_fidelity_keeps_existing_pr_untouched(self):
+        self.make_old("reel.txt", b"https://www.instagram.com/reel/ABC123/")
+        job = self.jobs / "ABC123"
+        job.mkdir(parents=True)
+        (job / "result.json").write_text(json.dumps(self.result("skillable")), encoding="utf-8")
+        (job / "analysis.md").write_text("Análisis previo", encoding="utf-8")
+        worker._save_transcript(job, self.transcript(), "base")
+        self.state_dir.mkdir(exist_ok=True)
+        pr = "https://github.com/test/pull/1"
+        self.state.write_text(json.dumps({"ABC123": {"status": "published", "pr": pr}}), encoding="utf-8")
+        with patch.object(worker, "generate", return_value=self.result("needs_review", "missing_context")), \
+             patch.object(worker, "publish") as publish:
+            self.assertEqual(worker.process_inbox(self.root / "config.json",
+                             ProcessOptions(target_id="ABC123", refresh_draft=True)), (1, 0))
+        publish.assert_not_called()
+        saved = json.loads(self.state.read_text(encoding="utf-8"))["ABC123"]
+        self.assertEqual((saved["status"], saved["pr"]), ("needs_review", pr))
+
     def test_targeted_retry_ignores_other_invalid_files(self):
         self.make_old("invalid.txt", b"no reel here")
         self.make_old("reel.txt", b"https://www.instagram.com/reel/ABC123/")

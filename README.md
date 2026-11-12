@@ -8,7 +8,8 @@ Convierte videos y enlaces de Reels de Instagram en borradores de skills revisab
 Video del teléfono (.mp4/.mov) o enlace de Reel en un .txt → carpeta de Drive
   → Drive para escritorio → trabajador Python local
   → Watch Skill: frames + OCR + subtítulos → Whisper si falta transcripción
-  → Codex CLI: imágenes + texto → borrador de PR en GitHub
+  → Codex CLI: mapa de enseñanzas → skill → revisión de fidelidad
+  → borrador de PR en GitHub si supera la revisión
 ```
 
 El correo y Apps Script son una **opción de entrada**, no requisitos: sirven para convertir el enlace compartido desde el teléfono en un `.txt` cuando no hay una acción móvil que lo guarde directamente en Drive.
@@ -65,6 +66,8 @@ El correo de entrada debe salir de `ALLOWED_SENDER`. Apps Script elimina paráme
 
 Cada video apto crea una rama `skill/CODIGO` y un draft PR con `skills/<nombre>/SKILL.md` y `sources/CODIGO.md`. Para archivos locales, `CODIGO` deriva del SHA-256 del video; la fuente documenta la huella en vez de publicar el archivo. Para enlaces, la fuente contiene el URL. Ambos incluyen análisis y marcas de tiempo de evidencia de audio o visual, sin transcripción ni frames completos. Si el video anuncia una lista y faltan elementos verificables, queda en `needs_review` en vez de inventar los puntos. Antes de fusionar, revisa fidelidad, utilidad, vigencia técnica y derechos de reutilización. Una opinión o video promocional sin método se registra como `not_skillable` y no crea PR. Cuando la duda proviene de la transcripción y configuraste `review_whisper_model`, el trabajador hace un segundo intento antes de dejarlo pendiente. Los errores no se repiten automáticamente; para reintentar todos los fallos usa `once --retry-failed`.
 
+La generación ahora separa la tesis y los puntos observados en un mapa con evidencia, redacta una skill desde ese mapa y encarga una revisión de fidelidad aparte. Si la revisión encuentra una pérdida sustancial, se hace una corrección automática y se revisa una vez más. Un fallo de fidelidad bloquea la publicación. La sección de fuente y la bóveda distinguen lo que enseñaba el video de las adaptaciones editoriales. El veredicto automático orienta la revisión humana; no demuestra por sí solo que la interpretación sea correcta.
+
 ### Revisar y reintentar un video
 
 `status` muestra el ID de cada video y su estado. Un trabajo conserva `visual.json`, los frames en `watch/`, `transcript.txt`, `analysis.md`, `result.json` y los intentos anteriores en `.local-state/jobs/ID/`. Estos archivos no se suben a GitHub. Para revisar un caso desde PowerShell:
@@ -73,9 +76,10 @@ Cada video apto crea una rama `skill/CODIGO` y un draft PR con `skills/<nombre>/
 .\.venv\Scripts\python.exe -m reel_skill_factory status
 .\.venv\Scripts\python.exe -m reel_skill_factory status CODIGO
 .\.venv\Scripts\python.exe -m reel_skill_factory retry CODIGO --model small
+.\.venv\Scripts\python.exe -m reel_skill_factory retry CODIGO --refresh-draft
 ```
 
-En macOS/Linux usa `.venv/bin/python` en las mismas órdenes. Si el modelo aún deja errores, corrige manualmente `.local-state/jobs/CODIGO/transcript.txt`, conservando `[mm:ss]` al comienzo de cada línea, y ejecuta `retry CODIGO --use-transcript`. Ese reintento usa la edición sin descargar ni transcribir otra vez. Revisa la fidelidad al audio antes de editar: el programa no puede certificar una corrección humana. `retry` no modifica un video ya publicado; abre su PR para revisarlo. Los intentos previos se conservan bajo `attempts/`.
+En macOS/Linux usa `.venv/bin/python` en las mismas órdenes. Si el modelo aún deja errores, corrige manualmente `.local-state/jobs/CODIGO/transcript.txt`, conservando `[mm:ss]` al comienzo de cada línea, y ejecuta `retry CODIGO --use-transcript`. Ese reintento usa la edición sin descargar ni transcribir otra vez. Revisa la fidelidad al audio antes de editar: el programa no puede certificar una corrección humana. Para regenerar un PR existente usa `retry CODIGO --refresh-draft`: reutiliza la transcripción y los frames guardados, conserva el resultado anterior en `history/` y actualiza el mismo PR únicamente si continúa abierto como borrador y solo contiene los archivos de esa skill. Si la revisión nueva falla, deja el PR anterior intacto y muestra la regeneración pendiente en la bóveda. Los intentos previos se conservan bajo `attempts/`.
 
 El worker usa una clonación temporal para cada PR y no modifica tu checkout. No lee ni sube cookies del navegador. Watch Skill procesa frames y OCR localmente; la transcripción, el OCR y las imágenes elegidas se envían a Codex CLI para generar el borrador. Codex se invoca en modo de solo lectura, sin comandos de shell y con búsqueda web activa para verificar detalles técnicos. El programa escribe únicamente los archivos del PR después de validar la estructura y las marcas de tiempo. Revisa todo contenido generado antes de usarlo.
 
