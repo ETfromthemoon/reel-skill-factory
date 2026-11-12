@@ -132,10 +132,12 @@ class GenerationTests(unittest.TestCase):
                     self.assertEqual(command[command.index("--image") + 1], str(frame))
                     self.assertEqual(command[-2:], ["--image", str(frame)])
                     self.assertIn('"ocr_text": "Error visual"', kwargs["input_text"])
+                    self.assertIn('"task_intent": "Transformar interfaces"', kwargs["input_text"])
 
             with patch("reel_skill_factory.core.run", side_effect=fake_run):
                 generated = generate("video de prueba", {"transcripcion": "",
-                                     "duracion_seg": 5}, workdir, visual=visual)
+                                     "duracion_seg": 5}, workdir, visual=visual,
+                                     task_intent="Transformar interfaces")
                 self.assertEqual(generated["status"], "skillable")
                 self.assertEqual(generated["source_map"]["lessons"][0]["id"], "L1")
 

@@ -43,6 +43,8 @@ Desde iPhone o Android, sube a `inbox` un video que tengas derecho a usar en for
 
 También puedes colocar un archivo `.txt` con un solo enlace de Reel en `inbox`, por ejemplo `reel-001.txt`. Watch Skill usa `yt-dlp` para obtener el video y sus subtítulos; Whisper transcribe el audio si faltan. Es una forma sencilla de probar enlaces desde el computador.
 
+Los enlaces compartidos de Threads no están admitidos como entrada `.txt` por este trabajador. Para analizar un video de Threads, guarda el archivo del video y súbelo a `inbox` como `.mp4` o usa el análisis manual con Watch Skill. Un video sin pista de audio puede producir una skill visual si sus frames explican el método. En una generación manual, `core.generate(..., task_intent=...)` permite indicar qué técnica se busca extraer cuando el tema que aparece en pantalla no es el objetivo de la skill.
+
 Si Instagram solo te ofrece **compartir el enlace**, eso no sube el video a Drive. Para la entrada directa, guarda primero un archivo de video al teléfono y súbelo desde la app de Drive. Para compartir solo el enlace, necesitas una acción que **cree un archivo de texto** en esa carpeta. En iPhone puedes explorar un atajo de la hoja Compartir que reciba URL/texto y use Guardar archivo en la ubicación de Google Drive disponible en Archivos. En Android, usa una acción o app que acepte texto compartido y lo guarde como `.txt` en Drive. Comprueba que el enlace terminó dentro del archivo; las opciones de Compartir cambian entre apps y versiones.
 
 ### Entrada opcional por correo desde iPhone y Android

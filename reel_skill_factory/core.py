@@ -216,7 +216,7 @@ def validate_fidelity(review: dict, source_map: dict) -> None:
 
 
 def generate(source: str, transcript: dict, workdir: Path, *, source_type: str = "reel_url",
-             visual: dict | None = None) -> dict:
+             visual: dict | None = None, task_intent: str | None = None) -> dict:
     duration = transcript.get("duracion_seg")
     rounded_duration = (math.ceil(duration) if isinstance(duration, (int, float))
                         and math.isfinite(duration) and duration >= 0 else None)
@@ -230,6 +230,8 @@ def generate(source: str, transcript: dict, workdir: Path, *, source_type: str =
             "frames": [{"image_number": index, "timestamp": frame["timestamp"],
                         "ocr_text": frame["ocr_text"]}
                        for index, frame in enumerate(frames, 1)]}
+    if task_intent:
+        data["task_intent"] = task_intent
     source_map = _model_json("source_map.md", "source_map_schema.json", "source-map.json",
                              workdir, {"video_data_json": data}, image_paths)
     try:
