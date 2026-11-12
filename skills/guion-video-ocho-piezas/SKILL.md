@@ -1,40 +1,27 @@
 ---
 name: guion-video-ocho-piezas
-description: "Invocar al escribir o revisar un video corto: organiza el guion en ocho piezas, alterna contenido útil con preguntas pendientes y termina con un siguiente paso claro."
+description: "Usa esta skill al escribir o revisar un guion de video corto. Organiza el guion en ocho piezas en orden fijo, alterna tres bloques de cuerpo con dos bucles abiertos y cierra con un siguiente paso concreto."
 ---
 
-## Objetivo y datos necesarios
-Ayuda a un creador o editor a escribir o revisar un guion breve orientado a mantener el interés y conducir a una acción.
+# Escribir un video corto en ocho piezas
 
-Solicita los datos imprescindibles que falten: tema, audiencia, beneficio concreto y acción deseada. Pregunta la duración objetivo si condiciona el encargo. Si recibes un guion existente, identifica sus piezas antes de reescribirlo.
+Usa esta secuencia para redactar o revisar un guion que busque mantener la atención hasta el cierre. Trabaja con el tema, la audiencia, lo que se llevará del video y la acción que quieres que tome al final. Si ya hay un borrador, úsalo como punto de partida. Como adaptación editorial, pregunta solo por los datos imprescindibles que falten para concretar la promesa, el contenido o la acción final.
 
-## Estructura de ocho piezas
-Aplica este orden como plantilla del método:
+## Orden del guion
 
-1. **Gancho:** abre con una pregunta, afirmación o contraste relevante que interrumpa la atención habitual de la audiencia.
-2. **Introducción:** explica en pocas palabras qué obtendrá quien continúe viendo. La promesa debe poder cumplirse en el guion.
-3. **Primer cuerpo:** entrega una idea útil que la audiencia probablemente desconozca. Usa los datos aportados; no inventes novedades ni hechos.
-4. **Primer bucle abierto:** plantea una pregunta pendiente relacionada con lo explicado y cuya respuesta aparezca después. El video ejemplifica esta función con «Pero eso no es lo más loco». Adapta la frase al contenido.
-5. **Segundo cuerpo:** continúa entregando valor y resuelve la expectativa anterior.
-6. **Segundo bucle abierto:** abre otra pregunta concreta que prepare el último bloque.
-7. **Último cuerpo:** aporta el valor restante y cierra la expectativa pendiente.
-8. **Llamado a la acción:** indica un siguiente paso específico, coherente con el beneficio y el objetivo del video.
+1. **Gancho.** Abre con algo que rompa con lo que la audiencia venía viendo y busque hacerla frenar. El reel abre con una pregunta directa, «¿Cómo se arma un video corto que la gente vea hasta el final?».
+2. **Introducción.** Di en pocos segundos qué se llevará la audiencia si se queda. El reel promete una estructura de ocho piezas en el mismo orden.
+3. **Primer cuerpo.** Entrega algo útil que la audiencia todavía no sabía. Escribe el dato, criterio o explicación que quieres que descubra en este bloque.
+4. **Primer bucle abierto.** Después del primer aporte, usa una frase que deje una pregunta pendiente y dé un motivo para seguir mirando. El ejemplo es «Pero eso no es lo más loco.». En su propio guion, el reel anticipa esta pieza con «Pero la pieza que de verdad los amarra viene ahora» antes de nombrar el bucle abierto.
+5. **Segundo cuerpo.** Entrega un segundo bloque de contenido después del primer bucle.
+6. **Segundo bucle abierto.** Después del segundo cuerpo, deja otra pregunta pendiente con el mismo mecanismo.
+7. **Tercer cuerpo.** Entrega el último bloque de contenido después del segundo bucle y antes del llamado a la acción.
+8. **Llamado a la acción.** Dile a quien llegó hasta aquí cuál es el siguiente paso. El reel muestra el recorrido completado con «Tú estás aquí» junto al cierre y pide «Guárdalo para cuando escribas tu próximo video».
 
-La resolución de los bucles en los cuerpos posteriores es una aplicación operativa de la explicación del video: abrir una pregunta para que el espectador quiera ver cómo se cierra.
+## Redacción y revisión del borrador
 
-## Diagnóstico y corrección
-Etiqueta cada fragmento del borrador con su función. Señala piezas ausentes, promesas sin respuesta, bloques sin valor concreto y llamados a la acción ambiguos. Corrige únicamente lo necesario para completar la secuencia y conectar las preguntas con sus respuestas. Recorta repeticiones para ajustarte a la duración solicitada, sin asignar tiempos rígidos que el método no proporciona.
+**Adaptación editorial.** Escribe el aporte concreto de cada cuerpo y anota qué pregunta deja cada bucle y en qué línea posterior se responde. Si una intriga queda sin respuesta, escribe su resolución en un bloque posterior antes del llamado a la acción.
 
-## Entrega y verificación
-Entrega el guion dividido en las ocho piezas. Si revisas un borrador, resume los cambios principales.
+Si recibes un borrador, identifica la función de cada fragmento y corrige piezas ausentes o fuera de orden. Si una frase de intriga queda vaga, vincúlala con una pregunta que el contenido posterior pueda resolver. Si el cierre es impreciso, redáctalo como una acción que la audiencia pueda realizar.
 
-Comprueba:
-
-- Están presentes las ocho piezas y conservan el orden indicado.
-- La introducción promete algo que los cuerpos entregan.
-- Cada cuerpo aporta información útil y sustentada.
-- Los dos bucles plantean expectativas pertinentes y tienen una respuesta posterior identificable.
-- El llamado a la acción indica qué hacer después.
-- El texto se puede leer dentro de la duración objetivo; si no se ha cronometrado, presenta su duración como estimación.
-
-Trata esta estructura como una heurística del creador. No garantices retención, visualizaciones ni clientes. Entrega un borrador para revisión humana; no publiques automáticamente.
+Entrega el guion dividido en ocho bloques numerados. Antes de entregarlo, comprueba el orden, que la introducción exprese una recompensa concreta, que el primer cuerpo aporte algo útil y nuevo para la audiencia prevista, que ambos bucles tengan respuesta y que el cierre indique una acción concreta. Si el guion ya existía, señala brevemente las correcciones principales.
