@@ -12,7 +12,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from .core import ROOT, TIMESTAMP, WorkflowError, generate, load_config, publish, transcribe
+from .core import ROOT, TIMESTAMP, WorkflowError, generate, load_config, transcribe
+from .library import draft_dir, save_draft
 from .inputs import InboxItem, inbox_files, read_inbox_item
 from .visual import inspect_video
 from .vault import write_vault
@@ -162,8 +163,8 @@ def _process_item(item: InboxItem, config, state: dict, options: ProcessOptions)
     previous = state.get(item.item_id, {}).copy()
     if options.refresh_draft:
         old_result = job_dir / "result.json"
-        if not old_result.is_file() or not previous.get("pr"):
-            raise WorkflowError("Falta el resultado o PR anterior para actualizar el borrador")
+        if not old_result.is_file() or not (draft_dir(config, item.item_id) / "SKILL.md").is_file():
+            raise WorkflowError("Falta el resultado o borrador local anterior")
         history = job_dir / "history" / (time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
                                          + "-" + uuid.uuid4().hex[:6])
         history.mkdir(parents=True, exist_ok=False)
@@ -191,23 +192,24 @@ def _process_item(item: InboxItem, config, state: dict, options: ProcessOptions)
                 transcript, result, chosen_model = improved_transcript, improved_result, fallback
         except (OSError, UnicodeError, WorkflowError) as exc:
             fallback_error = str(exc)
-    pr = None
-    if result["status"] == "skillable" and options.refresh_draft:
-        pr = publish(config, item.source, item.item_id, result, update_draft=True)
+    draft_path = None
+    if result["status"] == "skillable":
+        draft_path = save_draft(config, item.item_id, item.source, result,
+                                update=options.refresh_draft)
     _save_current(job_dir, transcript, result, chosen_model)
     record = {"status": result["status"], "source": item.source, "filename": item.filename,
               "job_dir": str(job_dir), "model": chosen_model,
               "review_reason": result["review_reason"], "analysis": result["analysis"]}
     if fallback_error:
         record["fallback_error"] = fallback_error
-    if options.refresh_draft and previous.get("pr"):
-        record["pr"] = previous["pr"]
+    if options.refresh_draft and previous.get("draft_path"):
+        record["draft_path"] = previous["draft_path"]
     state[item.item_id] = record
     _write_json(STATE_PATH, state)
     if result["status"] == "skillable":
-        record["pr"] = pr or publish(config, item.source, item.item_id, result)
-        record["status"] = "published"
-        print(f"PR: {record['pr']}", flush=True)
+        record["draft_path"] = str(draft_path)
+        record["status"] = "draft"
+        print(f"Borrador local: {draft_path}", flush=True)
     else:
         print(f"{record['status']}: {job_dir / 'analysis.md'}", flush=True)
 
@@ -238,12 +240,12 @@ def process_inbox(config_path: Path, options: ProcessOptions | None = None) -> t
                     continue
                 found_target = found_target or bool(options.target_id)
                 previous = state.get(key, {}).copy()
-                if previous.get("status") == "published" and options.target_id and not options.refresh_draft:
-                    raise WorkflowError("Este video ya tiene un PR; revisa el enlace antes de reprocesarlo")
-                if options.refresh_draft and (previous.get("status") not in {"published", "needs_review"}
-                                              or not previous.get("pr")):
+                if previous.get("status") == "draft" and options.target_id and not options.refresh_draft:
+                    raise WorkflowError("Este video ya tiene un borrador local; usa --refresh-draft")
+                if options.refresh_draft and (previous.get("status") not in {"draft", "needs_review"}
+                                              or not (draft_dir(config, key) / "SKILL.md").is_file()):
                     raise WorkflowError("Solo se puede actualizar un borrador existente")
-                if previous.get("status") in {"published", "not_skillable", "needs_review"} and not options.target_id:
+                if previous.get("status") in {"draft", "not_skillable", "needs_review"} and not options.target_id:
                     continue
                 if previous.get("status") == "failed" and not options.retry_failed and not options.target_id:
                     continue
@@ -255,7 +257,7 @@ def process_inbox(config_path: Path, options: ProcessOptions | None = None) -> t
                     # An unrelated malformed file must not affect a targeted retry.
                     continue
                 failures += 1
-                if options.target_id and previous.get("status") in {"needs_review", "not_skillable", "published"}:
+                if options.target_id and previous.get("status") in {"needs_review", "not_skillable", "draft"}:
                     state[key] = {**previous, "retry_error": str(exc)}
                 else:
                     state[key] = {**state.get(key, {}), "status": "failed", "error": str(exc)}

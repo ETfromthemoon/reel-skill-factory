@@ -86,7 +86,7 @@ def diagnose(config_path: Path, *, preinstall: bool = False, sample_url: str | N
         report("OK" if memory >= 4 else "REVISAR", "RAM", f"{memory:.1f} GB; con menos de 4 GB usa tiny o transcripción externa")
     free = shutil.disk_usage(config_path.parent).free / 1024 ** 3
     report("OK" if free >= 3 else "REVISAR", "Disco", f"{free:.1f} GB libres; Whisper puede descargar modelos grandes")
-    for name in ("git", "gh", "codex", "ffmpeg", "ffprobe", "yt-dlp", "whisper"):
+    for name in ("codex", "ffmpeg", "ffprobe", "yt-dlp", "whisper"):
         found = _tool(name)
         report("OK" if found else "FALTA", name, found or "no encontrado en PATH")
     visual_ready = _probe([sys.executable, "-c",
@@ -99,7 +99,7 @@ def diagnose(config_path: Path, *, preinstall: bool = False, sample_url: str | N
         try:
             config = load_config(config_path)
             report("OK", "Carpeta Drive", str(config.inbox_dir))
-            report("OK", "Configuración", config.repository)
+            report("OK", "Biblioteca privada", str(config.library_dir))
             report("OK", "Whisper de revisión", config.review_whisper_model or "desactivado")
             report("OK", "Límite de frames", str(config.visual_max_frames))
         except WorkflowError as exc:
@@ -108,23 +108,12 @@ def diagnose(config_path: Path, *, preinstall: bool = False, sample_url: str | N
         report("REVISAR" if preinstall else "FALTA", "Configuración",
                f"copia config.example.json a {config_path.name} y edita sus valores")
 
-    if _tool("gh"):
-        report("OK" if _probe(["gh", "auth", "status"]) else "FALTA", "GitHub login",
-               "usa gh auth login si falta")
-        if config:
-            permission = _output(["gh", "api", f"repos/{config.repository}", "--jq", ".permissions.push"])
-            report("OK" if permission == "true" else "FALTA", "GitHub escritura",
-                   config.repository if permission == "true" else "sin acceso de escritura o repo inexistente")
     if _tool("codex"):
         report("OK" if _probe(["codex", "login", "status"]) else "FALTA", "Codex login",
                "usa codex login si falta")
         help_text = _output(["codex", "exec", "--help"]) or ""
         report("OK" if "--image" in help_text else "FALTA", "Codex imágenes",
                "--image disponible" if "--image" in help_text else "actualiza Codex CLI")
-    if not _probe(["git", "config", "user.name"]) or not _probe(["git", "config", "user.email"]):
-        report("FALTA", "Git autor", "configura user.name y user.email")
-    else:
-        report("OK", "Git autor")
 
     if sample_url:
         try:

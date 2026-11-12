@@ -79,16 +79,12 @@ esac
 
 case "$platform" in
     Darwin)
-        command -v git >/dev/null 2>&1 || brew install git
-        command -v gh >/dev/null 2>&1 || brew install gh
         command -v codex >/dev/null 2>&1 || brew install --cask codex
         if [ "$skip_drive" -eq 0 ] && [ ! -d '/Applications/Google Drive.app' ]; then
             brew install --cask google-drive
         fi
         ;;
     Linux)
-        command -v git >/dev/null 2>&1 || install_linux_package git
-        command -v gh >/dev/null 2>&1 || install_linux_package gh
         if ! command -v codex >/dev/null 2>&1; then
             command -v curl >/dev/null 2>&1 || install_linux_package curl
             installer=$(mktemp)
@@ -104,11 +100,7 @@ case "$platform" in
         ;;
 esac
 
-command -v git >/dev/null 2>&1 || { echo 'Falta Git.' >&2; exit 1; }
-command -v gh >/dev/null 2>&1 || { echo 'Falta GitHub CLI.' >&2; exit 1; }
 command -v codex >/dev/null 2>&1 || { echo 'Falta Codex CLI; abre otra terminal y repite ./setup.sh.' >&2; exit 1; }
-git --version >/dev/null
-gh --version >/dev/null
 codex --version >/dev/null
 
 if [ ! -x .venv/bin/python ]; then
@@ -136,5 +128,4 @@ if [ "$skip_model" -eq 1 ]; then
 else
     .venv/bin/python scripts/prepare_runtime.py
 fi
-.venv/bin/python -m reel_skill_factory sync-skills
-echo 'Dependencias instaladas. Configura config.local.json, autentica GitHub/Codex y ejecuta: .venv/bin/python -m reel_skill_factory doctor'
+echo 'Dependencias instaladas. Configura config.local.json, autentica Codex y ejecuta: .venv/bin/python -m reel_skill_factory doctor'

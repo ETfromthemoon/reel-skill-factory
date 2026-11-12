@@ -17,7 +17,7 @@ from .worker import JOBS_DIR, STATE_DIR, load_state
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Videos de Instagram a skills revisables en GitHub")
+    parser = argparse.ArgumentParser(description="Videos de Instagram a skills privadas revisables")
     parser.add_argument("--config", type=Path, default=ROOT / "config.local.json")
     sub = parser.add_subparsers(dest="command", required=True)
     doctor = sub.add_parser("doctor", help="comprueba equipo, herramientas e integraciones")
@@ -31,7 +31,7 @@ def main() -> int:
     retry.add_argument("--use-transcript", action="store_true",
                        help="usa la transcripción editada guardada en .local-state/jobs/<ID>/transcript.txt")
     retry.add_argument("--refresh-draft", action="store_true",
-                       help="regenera un PR en borrador usando transcripción y frames guardados")
+                       help="regenera un borrador local usando transcripción y frames guardados")
     status = sub.add_parser("status", help="muestra resultados y rutas de revisión")
     status.add_argument("item_id", nargs="?")
     vault = sub.add_parser("vault", help="actualiza o abre la bóveda local")
@@ -40,11 +40,11 @@ def main() -> int:
     evaluation.add_argument("item_id")
     evaluation.add_argument("--scenario", required=True)
     evaluation.add_argument("--expected", required=True)
-    activation = sub.add_parser("activate", help="fusiona e instala una skill evaluada")
+    activation = sub.add_parser("activate", help="aprueba e instala localmente una skill evaluada")
     activation.add_argument("item_id")
     activation.add_argument("--target", type=Path, action="append", help="carpeta adicional de skills del agente")
     activation.add_argument("--accept-gaps", action="store_true", help="confirmo que revisé los vacíos del evaluador")
-    synchronize = sub.add_parser("sync-skills", help="instala skills integradas del repositorio en el agente local")
+    synchronize = sub.add_parser("sync-skills", help="instala skills aprobadas de la biblioteca privada")
     synchronize.add_argument("--target", type=Path, action="append", help="carpeta de skills del agente")
     sub.add_parser("watch", help="vigila la carpeta mientras este proceso esté abierto")
     args = parser.parse_args()
@@ -68,8 +68,9 @@ def main() -> int:
             print(path)
         return 0
     if args.command == "sync-skills":
-        installed = sync_approved(targets=args.target)
-        print(f"{len(installed)} instalaciones verificadas" if installed else "No hay skills integradas todavía")
+        library = load_config(args.config).library_dir if args.config.is_file() else None
+        installed = sync_approved(library_dir=library, targets=args.target)
+        print(f"{len(installed)} instalaciones verificadas" if installed else "No hay skills aprobadas todavía")
         return 0
     if args.command == "retry":
         if args.use_transcript and args.model:

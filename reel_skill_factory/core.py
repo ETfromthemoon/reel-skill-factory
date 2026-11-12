@@ -6,7 +6,6 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
@@ -14,7 +13,6 @@ from urllib.parse import urlsplit, urlunsplit
 
 ROOT = Path(__file__).resolve().parent.parent
 REEL_PATH = re.compile(r"^/reel/([A-Za-z0-9_-]+)/?$")
-REPO_NAME = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 URLS = re.compile(r"https?://[^\s<>\"']+")
 TIMESTAMP = re.compile(r"\[(?:\d{2}:)?\d{2}:\d{2}\]")
@@ -27,12 +25,11 @@ class WorkflowError(RuntimeError):
 @dataclass(frozen=True)
 class Config:
     inbox_dir: Path
-    repository: str
-    base_branch: str
     whisper_model: str
     poll_seconds: int
     review_whisper_model: str | None = None
     visual_max_frames: int = 48
+    library_dir: Path = Path.home() / ".reel-skill-factory" / "library"
 
 
 def load_config(path: Path) -> Config:
@@ -40,12 +37,8 @@ def load_config(path: Path) -> Config:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise WorkflowError(f"No se pudo leer {path}: {exc}") from exc
-    repository = str(data.get("repository", ""))
-    if not REPO_NAME.fullmatch(repository):
-        raise WorkflowError("repository debe tener formato OWNER/REPO")
-    branch = str(data.get("base_branch", "main"))
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", branch):
-        raise WorkflowError("base_branch no es válida")
+    if "repository" in data or "base_branch" in data:
+        raise WorkflowError("La configuración antigua de GitHub ya no se usa; elimina repository y base_branch")
     model = str(data.get("whisper_model", "base"))
     if model not in {"tiny", "base", "small", "medium"}:
         raise WorkflowError("whisper_model debe ser tiny, base, small o medium")
@@ -67,8 +60,13 @@ def load_config(path: Path) -> Config:
     inbox = Path(str(data.get("inbox_dir", ""))).expanduser()
     if not inbox.is_dir():
         raise WorkflowError(f"No existe la carpeta de Drive sincronizada: {inbox}")
-    return Config(inbox.resolve(), repository, branch, model, poll, review_model,
-                  visual_max_frames)
+    library = Path(str(data.get("library_dir", Path.home() / ".reel-skill-factory" / "library"))).expanduser()
+    if not library.is_absolute():
+        raise WorkflowError("library_dir debe ser una ruta absoluta fuera del repositorio")
+    library = library.resolve()
+    if library.is_relative_to(ROOT.resolve()) or library.is_relative_to(inbox.resolve()):
+        raise WorkflowError("library_dir debe quedar fuera del repositorio y de la carpeta de entrada")
+    return Config(inbox.resolve(), model, poll, review_model, visual_max_frames, library)
 
 
 def normalize_reel_url(value: str) -> tuple[str, str]:
@@ -343,99 +341,5 @@ def source_markdown(url: str, result: dict) -> str:
     if result["technical_sources"]:
         lines += ["", "## Fuentes técnicas", ""]
         lines += [f"- {source}" for source in result["technical_sources"]]
-    lines += ["", "## Revisión", "", "Borrador generado automáticamente. Verifica fidelidad, vigencia técnica y derechos antes de fusionar.", ""]
+    lines += ["", "## Revisión", "", "Borrador privado generado automáticamente. Verifica fidelidad, vigencia técnica y derechos antes de activarlo.", ""]
     return "\n".join(lines)
-
-
-def _create_draft_pr(config: Config, branch: str, url: str, title: str,
-                     source_path: Path, temp: Path, checkout: Path) -> str:
-    body_file = temp / "pr-body.md"
-    body_file.write_text(f"Fuente: {url}\n\nBorrador para revisar. Análisis y marcas de tiempo: `{source_path.as_posix()}`.\n"
-                         "Comprueba la vigencia técnica y los derechos de reutilización antes de fusionar.\n",
-                         encoding="utf-8")
-    run(["gh", "pr", "create", "--repo", config.repository, "--base", config.base_branch,
-         "--head", branch, "--draft", "--title", f"Skill: {title}",
-         "--body-file", str(body_file)], cwd=checkout, timeout=120)
-    details = json.loads(run(["gh", "pr", "view", branch, "--repo", config.repository,
-                              "--json", "url,state,isDraft"], timeout=60))
-    if not details.get("url") or details.get("state") != "OPEN" or not details.get("isDraft"):
-        raise WorkflowError("No se pudo verificar el borrador de PR")
-    return details["url"]
-
-
-def publish(config: Config, url: str, shortcode: str, result: dict, *, update_draft: bool = False) -> str:
-    branch = f"skill/{shortcode.lower()}"
-    with tempfile.TemporaryDirectory(prefix="reel-skill-git-") as temp:
-        checkout = Path(temp) / "repo"
-        run(["git", "clone", "--quiet", "--depth", "1", "--branch", config.base_branch,
-             f"https://github.com/{config.repository}.git", str(checkout)], timeout=180)
-        try:
-            existing = subprocess.run(["git", "ls-remote", "--exit-code", "--heads", "origin", branch],
-                                      cwd=checkout, capture_output=True, text=True, timeout=30,
-                                      creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            raise WorkflowError("No se pudo consultar la rama remota") from exc
-        if existing.returncode == 0:
-            prs = json.loads(run(["gh", "pr", "list", "--repo", config.repository,
-                                  "--head", branch, "--state", "all", "--json", "url,state"], timeout=60))
-            opened = next((pr for pr in prs if pr.get("state") == "OPEN"), None)
-            if opened:
-                if update_draft:
-                    details = json.loads(run(["gh", "pr", "view", branch, "--repo", config.repository,
-                                              "--json", "url,state,isDraft,files"], timeout=60))
-                    if details.get("state") != "OPEN" or not details.get("isDraft"):
-                        raise WorkflowError("El PR existente ya no es un borrador abierto")
-                    run(["git", "fetch", "--quiet", "origin", branch], cwd=checkout, timeout=120)
-                    source_path = Path("sources") / f"{shortcode}.md"
-                    remote_source = run(["git", "show", f"FETCH_HEAD:{source_path.as_posix()}"], cwd=checkout)
-                    changed = {file["path"] for file in details.get("files", [])}
-                    skill_files = [path for path in changed if path.startswith("skills/") and path.endswith("/SKILL.md")]
-                    if (f"Fuente: {url}" not in remote_source.splitlines()
-                            or changed != {source_path.as_posix(), *skill_files} or len(skill_files) != 1):
-                        raise WorkflowError("El PR contiene archivos inesperados; no se actualiza automáticamente")
-                    run(["git", "checkout", "-q", "-b", branch, "FETCH_HEAD"], cwd=checkout)
-                    skill_path = Path(skill_files[0])
-                    name = skill_path.parent.name
-                    (checkout / skill_path).write_text(skill_markdown(name, result), encoding="utf-8")
-                    (checkout / source_path).write_text(source_markdown(url, result), encoding="utf-8")
-                    run(["git", "add", str(skill_path), str(source_path)], cwd=checkout)
-                    run(["git", "diff", "--cached", "--check"], cwd=checkout)
-                    if run(["git", "diff", "--cached", "--name-only"], cwd=checkout):
-                        run(["git", "commit", "-qm", f"Improve fidelity of video {shortcode}"], cwd=checkout)
-                        run(["git", "push", "-q", "origin", branch], cwd=checkout, timeout=180)
-                    run(["gh", "pr", "edit", opened["url"], "--repo", config.repository,
-                         "--title", f"Skill: {result['title']}"], timeout=60)
-                return opened["url"]
-            if prs:
-                raise WorkflowError(f"La rama {branch} tiene un PR cerrado; revísalo antes de reintentar")
-            # A previous run may have pushed the branch but stopped before creating the PR.
-            run(["git", "fetch", "--quiet", "origin", branch], cwd=checkout, timeout=120)
-            source_path = Path("sources") / f"{shortcode}.md"
-            remote_source = run(["git", "show", f"FETCH_HEAD:{source_path.as_posix()}"], cwd=checkout)
-            changed = set(run(["git", "diff", "--name-only", "HEAD", "FETCH_HEAD"], cwd=checkout).splitlines())
-            expected_source = source_path.as_posix()
-            skill_files = [path for path in changed if path.startswith("skills/") and path.endswith("/SKILL.md")]
-            if f"Fuente: {url}" not in remote_source.splitlines() or changed != {expected_source, *skill_files} or len(skill_files) != 1:
-                raise WorkflowError(f"La rama remota {branch} no coincide con este video; revísala manualmente")
-            return _create_draft_pr(config, branch, url, result["title"], source_path,
-                                    Path(temp), checkout)
-        if existing.returncode != 2:
-            raise WorkflowError("No se pudo verificar si ya existe la rama remota")
-        run(["git", "checkout", "-q", "-b", branch], cwd=checkout)
-        name = result["slug"]
-        if (checkout / "skills" / name).exists():
-            name = f"{name}-{shortcode.lower()}"
-        skill_path = Path("skills") / name / "SKILL.md"
-        source_path = Path("sources") / f"{shortcode}.md"
-        if (checkout / source_path).exists():
-            raise WorkflowError(f"El Reel {shortcode} ya aparece en la rama base")
-        (checkout / skill_path).parent.mkdir(parents=True, exist_ok=True)
-        (checkout / source_path).parent.mkdir(parents=True, exist_ok=True)
-        (checkout / skill_path).write_text(skill_markdown(name, result), encoding="utf-8")
-        (checkout / source_path).write_text(source_markdown(url, result), encoding="utf-8")
-        run(["git", "add", str(skill_path), str(source_path)], cwd=checkout)
-        run(["git", "diff", "--cached", "--check"], cwd=checkout)
-        run(["git", "commit", "-qm", f"Add skill from video {shortcode}"], cwd=checkout)
-        run(["git", "push", "-q", "-u", "origin", branch], cwd=checkout, timeout=180)
-        return _create_draft_pr(config, branch, url, result["title"], source_path,
-                                Path(temp), checkout)

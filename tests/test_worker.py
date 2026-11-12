@@ -24,7 +24,7 @@ class InboxTests(unittest.TestCase):
         self.state = self.state_dir / "results.json"
         self.jobs = self.state_dir / "jobs"
         self.config = SimpleNamespace(inbox_dir=self.inbox, whisper_model="base",
-                                      review_whisper_model=None)
+                                      review_whisper_model=None, library_dir=self.root / "private-library")
         for name, value in (("STATE_DIR", self.state_dir), ("STATE_PATH", self.state),
                             ("JOBS_DIR", self.jobs)):
             patcher = patch.object(worker, name, value)
@@ -60,12 +60,12 @@ class InboxTests(unittest.TestCase):
         return {"status": status, "review_reason": reason,
                 "analysis": "El video propone un método que requiere revisar algunas palabras del audio."}
 
-    def test_local_video_uses_file_and_hash_without_publishing_file_path(self):
+    def test_local_video_creates_private_draft_without_publishing_file_path(self):
         video = self.make_old("mi-video.mp4", b"video de prueba")
         digest = hashlib.sha256(video.read_bytes()).hexdigest()
         with patch.object(worker, "transcribe", return_value=self.transcript()) as transcribe, \
              patch.object(worker, "generate", return_value=self.result("skillable")) as generate, \
-             patch.object(worker, "publish", return_value="https://github.com/test/pull/1") as publish:
+             patch.object(worker, "save_draft", return_value=self.root / "private-library" / "drafts" / "video" / "SKILL.md") as save:
             self.assertEqual(worker.process_inbox(self.root / "config.json"), (1, 0))
             self.assertEqual(worker.process_inbox(self.root / "config.json"), (0, 0))
 
@@ -73,12 +73,13 @@ class InboxTests(unittest.TestCase):
         self.assertEqual(transcribe.call_args.args[0], str(video))
         self.assertEqual(generate.call_args.kwargs["source_type"], "local_video")
         self.assertIs(generate.call_args.kwargs["visual"], self.visual)
-        source = publish.call_args.args[1]
+        source = save.call_args.args[2]
         self.assertIn(digest, source)
         self.assertNotIn(str(video), source)
         item_id = f"video-{digest[:16]}"
         saved = json.loads(self.state.read_text(encoding="utf-8"))
-        self.assertEqual(saved[item_id]["status"], "published")
+        self.assertEqual(saved[item_id]["status"], "draft")
+        self.assertNotIn("pr", saved[item_id])
         self.assertTrue((self.jobs / item_id / "transcript.txt").is_file())
 
     def test_new_video_waits_for_drive_sync(self):
@@ -113,7 +114,7 @@ class InboxTests(unittest.TestCase):
         transcribe.assert_not_called()
         self.assertEqual(generate.call_args.args[1], self.visual["captions"])
 
-    def test_transcription_review_tries_small_and_publishes_only_clear_result(self):
+    def test_transcription_review_tries_small_and_saves_only_clear_result(self):
         self.make_old("reel.txt", b"https://www.instagram.com/reel/ABC123/")
         self.config.review_whisper_model = "small"
         first = self.transcript("[00:01] Palabras dudosas.")
@@ -121,12 +122,12 @@ class InboxTests(unittest.TestCase):
         with patch.object(worker, "transcribe", side_effect=[first, second]) as transcribe, \
              patch.object(worker, "generate", side_effect=[
                  self.result("needs_review", "transcription"), self.result("skillable")]), \
-             patch.object(worker, "publish", return_value="https://github.com/test/pull/2") as publish:
+             patch.object(worker, "save_draft", return_value=self.root / "draft" / "SKILL.md") as save:
             self.assertEqual(worker.process_inbox(self.root / "config.json"), (1, 0))
         self.assertEqual([call.args[1] for call in transcribe.call_args_list], ["base", "small"])
-        self.assertEqual(publish.call_count, 1)
+        self.assertEqual(save.call_count, 1)
         saved = json.loads(self.state.read_text(encoding="utf-8"))["ABC123"]
-        self.assertEqual((saved["status"], saved["model"]), ("published", "small"))
+        self.assertEqual((saved["status"], saved["model"]), ("draft", "small"))
         self.assertIn("Define el problema", (self.jobs / "ABC123" / "transcript.txt").read_text())
         self.assertEqual(len(list((self.jobs / "ABC123" / "attempts").iterdir())), 2)
 
@@ -136,9 +137,9 @@ class InboxTests(unittest.TestCase):
         with patch.object(worker, "transcribe", side_effect=[self.transcript(), self.transcript()]), \
              patch.object(worker, "generate", side_effect=[
                  self.result("needs_review", "transcription"), self.result("not_skillable")]), \
-             patch.object(worker, "publish") as publish:
+             patch.object(worker, "save_draft") as save:
             self.assertEqual(worker.process_inbox(self.root / "config.json"), (1, 0))
-        publish.assert_not_called()
+        save.assert_not_called()
         saved = json.loads(self.state.read_text(encoding="utf-8"))["ABC123"]
         self.assertEqual((saved["status"], saved["model"]), ("needs_review", "base"))
 
@@ -147,7 +148,7 @@ class InboxTests(unittest.TestCase):
         with patch.object(worker, "transcribe", return_value=self.transcript()) as transcribe, \
              patch.object(worker, "generate", side_effect=[
                  self.result("needs_review", "transcription"), self.result("skillable")]), \
-             patch.object(worker, "publish", return_value="https://github.com/test/pull/3"):
+             patch.object(worker, "save_draft", return_value=self.root / "draft" / "SKILL.md"):
             self.assertEqual(worker.process_inbox(self.root / "config.json"), (1, 0))
             editable = self.jobs / "ABC123" / "transcript.txt"
             editable.write_text("[00:01] Primero define el problema con precisión.\n", encoding="utf-8")
@@ -155,7 +156,7 @@ class InboxTests(unittest.TestCase):
             self.assertEqual(worker.process_inbox(self.root / "config.json", options), (1, 0))
         self.assertEqual(transcribe.call_count, 1)
         saved = json.loads(self.state.read_text(encoding="utf-8"))["ABC123"]
-        self.assertEqual((saved["status"], saved["model"]), ("published", "edited"))
+        self.assertEqual((saved["status"], saved["model"]), ("draft", "edited"))
 
     def test_failed_retry_keeps_previous_review_result(self):
         self.make_old("reel.txt", b"https://www.instagram.com/reel/ABC123/")
@@ -176,21 +177,23 @@ class InboxTests(unittest.TestCase):
         (self.jobs / "ABC123" / "result.json").write_text(json.dumps(old), encoding="utf-8")
         (self.jobs / "ABC123" / "analysis.md").write_text("Análisis previo", encoding="utf-8")
         worker._save_transcript(self.jobs / "ABC123", self.transcript(), "base")
-        self.state.write_text(json.dumps({"ABC123": {"status": "published", "pr": "https://github.com/test/pull/1"}}),
+        self.config.library_dir.joinpath("drafts", "ABC123").mkdir(parents=True)
+        self.config.library_dir.joinpath("drafts", "ABC123", "SKILL.md").write_text("old", encoding="utf-8")
+        self.state.write_text(json.dumps({"ABC123": {"status": "draft", "draft_path": "old"}}),
                               encoding="utf-8")
         new = self.result("skillable") | {"title": "Versión nueva"}
         with patch.object(worker, "transcribe") as transcribe, \
              patch.object(worker, "generate", return_value=new), \
-             patch.object(worker, "publish", return_value="https://github.com/test/pull/1") as publish:
+             patch.object(worker, "save_draft", return_value=self.root / "draft" / "SKILL.md") as save:
             self.assertEqual(worker.process_inbox(self.root / "config.json",
                              ProcessOptions(target_id="ABC123", refresh_draft=True)), (1, 0))
         transcribe.assert_not_called()
-        self.assertTrue(publish.call_args.kwargs["update_draft"])
+        self.assertTrue(save.call_args.kwargs["update"])
         history = next((self.jobs / "ABC123" / "history").iterdir())
         self.assertEqual(json.loads((history / "result.json").read_text(encoding="utf-8"))["title"], "Versión anterior")
         self.assertEqual(json.loads((self.jobs / "ABC123" / "result.json").read_text(encoding="utf-8"))["title"], "Versión nueva")
 
-    def test_failed_fidelity_keeps_existing_pr_untouched(self):
+    def test_failed_fidelity_keeps_existing_draft_untouched(self):
         self.make_old("reel.txt", b"https://www.instagram.com/reel/ABC123/")
         job = self.jobs / "ABC123"
         job.mkdir(parents=True)
@@ -198,15 +201,18 @@ class InboxTests(unittest.TestCase):
         (job / "analysis.md").write_text("Análisis previo", encoding="utf-8")
         worker._save_transcript(job, self.transcript(), "base")
         self.state_dir.mkdir(exist_ok=True)
-        pr = "https://github.com/test/pull/1"
-        self.state.write_text(json.dumps({"ABC123": {"status": "published", "pr": pr}}), encoding="utf-8")
+        draft = self.config.library_dir / "drafts" / "ABC123" / "SKILL.md"
+        draft.parent.mkdir(parents=True)
+        draft.write_text("old", encoding="utf-8")
+        self.state.write_text(json.dumps({"ABC123": {"status": "draft", "draft_path": str(draft)}}), encoding="utf-8")
         with patch.object(worker, "generate", return_value=self.result("needs_review", "missing_context")), \
-             patch.object(worker, "publish") as publish:
+             patch.object(worker, "save_draft") as save:
             self.assertEqual(worker.process_inbox(self.root / "config.json",
                              ProcessOptions(target_id="ABC123", refresh_draft=True)), (1, 0))
-        publish.assert_not_called()
+        save.assert_not_called()
         saved = json.loads(self.state.read_text(encoding="utf-8"))["ABC123"]
-        self.assertEqual((saved["status"], saved["pr"]), ("needs_review", pr))
+        self.assertEqual((saved["status"], saved["draft_path"]), ("needs_review", str(draft)))
+        self.assertEqual(draft.read_text(encoding="utf-8"), "old")
 
     def test_targeted_retry_ignores_other_invalid_files(self):
         self.make_old("invalid.txt", b"no reel here")

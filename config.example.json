@@ -1,7 +1,5 @@
 {
   "inbox_dir": "PATH_TO_SYNCED_DRIVE_FOLDER",
-  "repository": "OWNER/reel-skill-factory",
-  "base_branch": "main",
   "whisper_model": "base",
   "review_whisper_model": null,
   "visual_max_frames": 48,

@@ -1,4 +1,5 @@
 import tempfile
+import hashlib
 import unittest
 from pathlib import Path
 
@@ -20,23 +21,24 @@ class VaultTests(unittest.TestCase):
                 '"issues":[],"editorial_additions":["Comprobar contraste"]},'
                 '"evidence":[{"timestamp":"[00:02]","modality":"visual",'
                 '"finding":"Una tarjeta"}]}', encoding="utf-8")
-            state = {"ABC123": {"status": "published", "pr": "https://github.com/example/repo/pull/1"}}
+            state = {"ABC123": {"status": "draft", "draft_path": "C:/private/ABC123/SKILL.md"}}
             html = render_vault(state, root / "jobs", root)
             self.assertIn("Revisar &lt;script&gt;", html)
-            self.assertIn("Borrador listo", html)
+            self.assertIn("Borrador privado", html)
             self.assertNotIn("<script>", html)
             self.assertIn("Por qué se creó", html)
             self.assertIn("Qué enseñaba el video", html)
             self.assertIn("Enseña &lt;script&gt;", html)
             self.assertIn("Contraste y adaptaciones", html)
             self.assertIn("Evidencia del video (1)", html)
-            self.assertIn("https://github.com/example/repo/pull/1", html)
+            self.assertIn("C:/private/ABC123/SKILL.md", html)
+            self.assertNotIn("github.com", html)
             self.assertTrue(write_vault(state, root / "jobs", root).is_file())
 
     def test_ignores_invalid_job_ids(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            html = render_vault({"../outside": {"status": "published"}}, root / "jobs", root)
+            html = render_vault({"../outside": {"status": "draft"}}, root / "jobs", root)
             self.assertNotIn("../outside", html)
 
     def test_interactive_vault_shows_review_gate_and_escapes_report(self):
@@ -44,9 +46,13 @@ class VaultTests(unittest.TestCase):
             root = Path(temp)
             report = root / "jobs" / "ABC123" / "evaluations" / "trial" / "report.json"
             report.parent.mkdir(parents=True)
-            report.write_text('{"status":"review","judgment":{"verdict":"review",'
+            skill = root / "private" / "SKILL.md"
+            skill.parent.mkdir(parents=True)
+            skill.write_text("A skill\n", encoding="utf-8")
+            revision = hashlib.sha256(skill.read_text(encoding="utf-8").encode()).hexdigest()
+            report.write_text('{"status":"review","revision":"' + revision + '","judgment":{"verdict":"review",'
                               '"summary":"<script>","gaps":["Sin navegador"]}}', encoding="utf-8")
-            html = render_vault({"ABC123": {"status": "published"}}, root / "jobs", root,
+            html = render_vault({"ABC123": {"status": "draft", "draft_path": str(skill)}}, root / "jobs", root,
                                 token="local-token")
             self.assertIn("Probar en entorno aislado", html)
             self.assertIn("Revisé la prueba", html)
