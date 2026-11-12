@@ -1,21 +1,19 @@
 ---
 name: diagnosticar-abandono-video
-description: "Invoca esta skill al revisar un guion o un montaje de video corto. Detecta confusión, falta de valor después de la idea central, esfuerzo excesivo para seguir el contenido y similitud con piezas conocidas. Propone cambios concretos y comprueba el resultado."
+description: "Invoca esta skill al revisar un borrador o un Reel publicado de Instagram para identificar si la audiencia podría pasar de largo por confusión, porque ya captó el punto, por el esfuerzo de seguirlo o porque le resulta demasiado familiar."
 ---
 
-## Insumos
+## Material de entrada
 
-Usa el guion, la transcripción o el montaje disponible. Si falta el contenido, pídelo. Si la audiencia o el valor prometido no se pueden inferir y afectan el diagnóstico, pregunta a quién se dirige el video y qué debería llevarse esa persona. Si solo tienes texto, deja pendiente lo que dependa del ritmo real o del montaje.
+Usa el Reel, su guion o una transcripción, y la audiencia prevista. Si falta el contenido, pide el material disponible. Si desconoces a quién se dirige, pregunta qué sabe ya esa audiencia. Con un guion puedes revisar el lenguaje, la estructura y las repeticiones. Para evaluar el ritmo del montaje necesitas el video o un desglose con tiempos.
 
-## Diagnóstico y corrección
+## Checklist de diagnóstico
 
-Localiza la promesa inicial, el momento en que se entiende la idea principal y lo que queda después. Para cada hallazgo, señala una frase, escena o marca de tiempo y aplica el ajuste correspondiente.
+1. **Confusión.** Busca jerga del sector, lenguaje demasiado complejo para esa audiencia y conceptos que se introducen sin una explicación sencilla. Señala qué frase impide entender qué quiere decir el creador. *Adaptación editorial:* reformula la frase con palabras que la audiencia conozca o define el término al usarlo. Por ejemplo, cambia «optimiza el CTR» por «consigue que más personas hagan clic», si esa es la idea que se quiere transmitir.
+2. **Payoff o punto ya entendido.** Ubica el momento en que la audiencia puede captar el mensaje principal. Revisa qué queda después y si ofrece un motivo concreto para seguir mirando. *Adaptación editorial:* si el resto solo vuelve sobre la idea, cierra ahí. Si queda valor por entregar, hazlo visible y cúmplelo. Por ejemplo, después de explicar el error, muestra cómo corregirlo con un antes y un después.
+3. **Esfuerzo de seguimiento.** Busca tramos demasiado largos, lentos o que repiten el mismo punto. Comprueba si el mensaje se entiende y aun así cuesta seguirlo por el ritmo o la reiteración. *Adaptación editorial:* marca el tramo que exige ese esfuerzo, recorta la reiteración o acorta la espera entre aportes y vuelve a reproducirlo para comprobar que se conserva el hilo.
+4. **Familiaridad.** Busca qué haría que la audiencia reconociera el video como otro que ya vio, aunque todavía no haya captado el punto de este Reel. *Adaptación editorial:* si hay referencias de contenido que la audiencia conoce, compara la apertura, el enfoque y el ejemplo. Si todos cuentan lo mismo de forma parecida, abre con un caso, una observación o una demostración que aporte una diferencia concreta. Si faltan referencias, deja la familiaridad como hipótesis.
 
-1. **Confusión.** Busca jerga, lenguaje demasiado complejo para la audiencia o conceptos sin explicar. Sustituye los términos prescindibles y explica los imprescindibles con palabras comunes o un ejemplo breve.
-2. **Valor después de la idea principal.** Revisa qué recibe la audiencia una vez que entiende el punto. Si el resto solo lo repite, recórtalo o aporta algo que permita usarlo, como una demostración o un ejemplo aplicado. Conserva el orden que mejor cumple la promesa.
-3. **Esfuerzo.** Busca tramos lentos, repeticiones y secuencias que obligan a reconstruir el hilo aunque cada frase se entienda. Recorta redundancias y ordena las ideas para que cada paso prepare el siguiente. Con montaje disponible, comprueba también las pausas y transiciones.
-4. **Familiaridad.** Si tienes referencias comparables, identifica qué coincide con ellas en el inicio, el enfoque o la ejecución. Introduce una diferencia concreta que aporte valor, como un caso específico o una demostración propia. Si faltan referencias, registra la similitud como hipótesis.
+## Entrega y comprobación
 
-## Entrega y verificación
-
-Entrega los hallazgos priorizados, con evidencia y cambios concretos. Incluye el fragmento corregido o una indicación de edición que se pueda aplicar. Revisa la propuesta de principio a fin desde la perspectiva de la audiencia. Comprueba que se entiende el tema, que cada tramo aporta algo, que el hilo se sigue con facilidad y que la diferencia se percibe donde corresponda. Presenta los hallazgos como hipótesis editoriales. Si dispones de datos de retención, contrasta los tramos señalados y distingue una coincidencia temporal de una causa demostrada.
+*Adaptación editorial:* presenta los cuatro criterios en orden. Para cada hallazgo, indica la frase, el tramo o la referencia que lo sustenta, el cambio propuesto y cualquier dato que falte para evaluarlo. Revisa la versión corregida con el mismo checklist. Comprueba que se entiende el mensaje, que lo que sigue aporta algo una vez captado el punto, que se puede seguir sin esperas ni repeticiones innecesarias y que la diferencia frente a contenidos similares se percibe donde corresponde. Trata los hallazgos como hipótesis de revisión editorial.
