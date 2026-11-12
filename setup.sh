@@ -136,4 +136,5 @@ if [ "$skip_model" -eq 1 ]; then
 else
     .venv/bin/python scripts/prepare_runtime.py
 fi
+.venv/bin/python -m reel_skill_factory sync-skills
 echo 'Dependencias instaladas. Configura config.local.json, autentica GitHub/Codex y ejecuta: .venv/bin/python -m reel_skill_factory doctor'

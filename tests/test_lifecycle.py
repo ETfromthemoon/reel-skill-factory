@@ -93,6 +93,27 @@ class LifecycleTests(unittest.TestCase):
         self.assertTrue(any(cmd[:3] == ["gh", "pr", "merge"] for cmd in commands))
         self.assertEqual(json.loads((job / "activation.json").read_text(encoding="utf-8"))["merge_commit"], "b" * 40)
 
+    def test_sync_approved_installs_updates_and_preserves_user_edits(self):
+        catalog = self.root / "skills" / "example"
+        catalog.mkdir(parents=True)
+        skill = catalog / "SKILL.md"
+        skill.write_text("---\nname: example\ndescription: Test skill\n---\n\nFirst\n", encoding="utf-8")
+        target_root = self.root / "agent"
+        installed = lifecycle.sync_approved(source_root=self.root, targets=[target_root])
+        self.assertEqual(installed, [target_root / "example" / "SKILL.md"])
+        self.assertEqual(installed[0].read_text(encoding="utf-8"), skill.read_text(encoding="utf-8"))
+        skill.write_text("---\nname: example\ndescription: Test skill\n---\n\nSecond\n", encoding="utf-8")
+        lifecycle.sync_approved(source_root=self.root, targets=[target_root])
+        self.assertIn("Second", installed[0].read_text(encoding="utf-8"))
+        installed[0].write_text("My edits", encoding="utf-8")
+        with self.assertRaisesRegex(WorkflowError, "modificada"):
+            lifecycle.sync_approved(source_root=self.root, targets=[target_root])
+        self.assertEqual(installed[0].read_text(encoding="utf-8"), "My edits")
+
+    def test_sync_approved_ignores_missing_catalog(self):
+        self.assertEqual(lifecycle.sync_approved(source_root=self.root,
+                                                  targets=[self.root / "agent"]), [])
+
 
 if __name__ == "__main__":
     unittest.main()
