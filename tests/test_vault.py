@@ -14,6 +14,10 @@ class VaultTests(unittest.TestCase):
             (job / "result.json").write_text(
                 '{"title":"Revisar <script>","description":"Diseñar tarjetas",'
                 '"instructions_md":"No ejecutar <script>","analysis":"Visto en [00:02]",'
+                '"source_map":{"thesis":"Enseña <script>","lessons":'
+                '[{"id":"L1","point":"Corregir la tarjeta","basis":"explicit"}]},'
+                '"fidelity_review":{"verdict":"pass","summary":"Cubre L1",'
+                '"issues":[],"editorial_additions":["Comprobar contraste"]},'
                 '"evidence":[{"timestamp":"[00:02]","modality":"visual",'
                 '"finding":"Una tarjeta"}]}', encoding="utf-8")
             state = {"ABC123": {"status": "published", "pr": "https://github.com/example/repo/pull/1"}}
@@ -22,6 +26,9 @@ class VaultTests(unittest.TestCase):
             self.assertIn("Borrador listo", html)
             self.assertNotIn("<script>", html)
             self.assertIn("Por qué se creó", html)
+            self.assertIn("Qué enseñaba el video", html)
+            self.assertIn("Enseña &lt;script&gt;", html)
+            self.assertIn("Contraste y adaptaciones", html)
             self.assertIn("Evidencia del video (1)", html)
             self.assertIn("https://github.com/example/repo/pull/1", html)
             self.assertTrue(write_vault(state, root / "jobs", root).is_file())

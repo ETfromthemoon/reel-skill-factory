@@ -61,6 +61,20 @@ class PublishRecoveryTests(unittest.TestCase):
             with self.assertRaisesRegex(WorkflowError, "no coincide"):
                 publish(self.config, self.source, "ABC123", self.result)
 
+    def test_refresh_rejects_non_draft_open_pr(self):
+        def fake_run(command, **kwargs):
+            if command[:3] == ["gh", "pr", "list"]:
+                return json.dumps([{"url": "https://github.com/owner/repo/pull/1", "state": "OPEN"}])
+            if command[:3] == ["gh", "pr", "view"]:
+                return json.dumps({"state": "OPEN", "isDraft": False, "files": []})
+            return ""
+
+        with patch("reel_skill_factory.core.subprocess.run", return_value=SimpleNamespace(returncode=0)), \
+             patch("reel_skill_factory.core.run", side_effect=fake_run) as run:
+            with self.assertRaisesRegex(WorkflowError, "borrador abierto"):
+                publish(self.config, self.source, "ABC123", self.result, update_draft=True)
+        self.assertFalse(any(call.args[0][:2] == ["git", "push"] for call in run.call_args_list))
+
 
 if __name__ == "__main__":
     unittest.main()

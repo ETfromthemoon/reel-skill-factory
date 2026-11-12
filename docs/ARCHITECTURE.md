@@ -8,12 +8,12 @@ Teléfono → Drive → carpeta local
   → worker.py: exclusión mutua, estado, intentos y reintentos
   → visual.py + Watch Skill: video, frames, OCR y subtítulos
   → extraer_transcripcion.py: FFmpeg/Whisper si no hay subtítulos
-  → core.py + Codex: imágenes + texto, análisis estructurado y validación
+  → core.py + Codex: mapa de enseñanzas, skill y revisión de fidelidad
   → core.py + Git/GitHub CLI: rama y draft PR (solo si es apto)
   → vault.py: bóveda HTML local de solo lectura, actualizada con cada estado
 ```
 
-`__main__.py` solo define los comandos `doctor`, `once`, `watch`, `status` y `retry`. `doctor.py` revisa el equipo y las integraciones. `config.local.json` contiene la ruta y las preferencias locales; está ignorado por Git.
+`__main__.py` define los comandos `doctor`, `once`, `watch`, `status`, `vault` y `retry`. `doctor.py` revisa el equipo y las integraciones. `config.local.json` contiene la ruta y las preferencias locales; está ignorado por Git.
 
 ## Estado y recuperación
 
@@ -28,6 +28,8 @@ El estado vive en `.local-state/results.json`; una vez completada cada etapa, el
 `visual.py` conserva `.local-state/jobs/ID/visual.json` y los frames de Watch Skill en `watch/`; los reintentos reutilizan esas imágenes. Se fijan los primeros segundos y Watch Skill selecciona escenas del resto del video con un máximo configurable. Si hay subtítulos, se reutilizan; si no, el extractor existente transcribe el video adquirido. Los videos sin audio pueden generar una skill basada en imágenes. El modelo inicial de audio es `whisper_model`. `review_whisper_model` es opcional y solo se usa cuando el análisis clasifica el problema como transcripción. Si el segundo modelo contradice un `needs_review` con `not_skillable`, el caso sigue pendiente en vez de descartarse. Un usuario puede corregir `transcript.txt` y usar `retry ID --use-transcript` sin volver a descargar el Reel. Los intentos antiguos quedan conservados.
 
 ## Límites de confianza
+
+La generación usa tres llamadas: mapa con tesis, formato, enseñanzas y evidencia; skill redactada desde ese mapa; revisión independiente que compara cobertura, distorsiones y adaptaciones. Ante un fallo de fidelidad, se permite una corrección y una nueva revisión. Si persiste, el resultado queda en `needs_review` sin actualizar el PR. `result.json` conserva el mapa y el veredicto; `history/` conserva versiones previas de una regeneración.
 
 Un enlace o video, sus subtítulos, OCR, imágenes y transcripción son material externo. El generador recibe instrucciones para no obedecer órdenes dentro de ese material. La validación comprueba la estructura de la skill y que cada cita de audio o visual corresponda a una marca de tiempo realmente entregada. Esto no demuestra que el OCR sea correcto ni que una recomendación del creador sea válida: el PR queda como borrador para revisión humana.
 

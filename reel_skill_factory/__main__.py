@@ -28,6 +28,8 @@ def main() -> int:
     retry.add_argument("--model", choices=("tiny", "base", "small", "medium"))
     retry.add_argument("--use-transcript", action="store_true",
                        help="usa la transcripción editada guardada en .local-state/jobs/<ID>/transcript.txt")
+    retry.add_argument("--refresh-draft", action="store_true",
+                       help="regenera un PR en borrador usando transcripción y frames guardados")
     status = sub.add_parser("status", help="muestra resultados y rutas de revisión")
     status.add_argument("item_id", nargs="?")
     sub.add_parser("vault", help="actualiza la bóveda HTML local y muestra su ruta")
@@ -44,8 +46,11 @@ def main() -> int:
     if args.command == "retry":
         if args.use_transcript and args.model:
             parser.error("--model y --use-transcript son alternativas")
+        if args.refresh_draft and args.model:
+            parser.error("--refresh-draft usa la transcripción guardada; no acepta --model")
         options = ProcessOptions(target_id=args.item_id, model_override=args.model,
-                                 use_saved_transcript=args.use_transcript)
+                                 use_saved_transcript=args.use_transcript,
+                                 refresh_draft=args.refresh_draft)
         _, failures = process_inbox(args.config, options)
         return 1 if failures else 0
     if args.command == "once":
