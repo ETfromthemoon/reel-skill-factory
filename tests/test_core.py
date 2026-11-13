@@ -143,11 +143,16 @@ class GenerationTests(unittest.TestCase):
                     self.assertEqual(command[-2:], ["--image", str(frame)])
                     self.assertIn('"ocr_text": "Error visual"', kwargs["input_text"])
                     self.assertIn('"task_intent": "Transformar interfaces"', kwargs["input_text"])
+                if output.name == "generation.json":
+                    self.assertIn('"revision_feedback": "Corregir jerarquía"', kwargs["input_text"])
+                if output.name == "source-map.json":
+                    self.assertNotIn('"revision_feedback": "Corregir jerarquía"', kwargs["input_text"])
 
             with patch("reel_skill_factory.core.run", side_effect=fake_run):
                 generated = generate("video de prueba", {"transcripcion": "",
                                      "duracion_seg": 5}, workdir, visual=visual,
-                                     task_intent="Transformar interfaces")
+                                     task_intent="Transformar interfaces",
+                                     revision_feedback="Corregir jerarquía")
                 self.assertEqual(generated["status"], "skillable")
                 self.assertEqual(generated["source_map"]["lessons"][0]["id"], "L1")
 
@@ -173,7 +178,7 @@ class GenerationTests(unittest.TestCase):
         self.assertEqual(review["verdict"], "review")
         self.assertIn("L2", review["issues"][0])
 
-    def test_failed_fidelity_gets_one_revision_before_publication(self):
+    def test_failed_fidelity_gets_one_revision_before_draft(self):
         source_map = {"thesis": "El video enseña a definir el problema y luego probar una solución.",
                       "audience": "Equipos", "format": "sequence", "promised_count": 2,
                       "lessons": [

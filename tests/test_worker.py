@@ -82,8 +82,50 @@ class InboxTests(unittest.TestCase):
         self.assertNotIn("pr", saved[item_id])
         self.assertTrue((self.jobs / item_id / "transcript.txt").is_file())
 
+    def test_new_draft_gets_automatic_demo(self):
+        self.make_old("reel.txt", b"https://www.instagram.com/reel/ABC123/")
+        draft = self.root / "private-library" / "drafts" / "ABC123" / "SKILL.md"
+        draft.parent.mkdir(parents=True)
+        draft.write_text("A skill", encoding="utf-8")
+        with patch.object(worker, "transcribe", return_value=self.transcript()), \
+             patch.object(worker, "generate", return_value=self.result("skillable")), \
+             patch.object(worker, "save_draft", return_value=draft), \
+             patch.object(worker, "create_demo", return_value=self.jobs / "ABC123" / "auto-demo.json") as make_demo:
+            self.assertEqual(worker.process_inbox(self.root / "config.json"), (1, 0))
+        self.assertEqual(make_demo.call_count, 1)
+        self.assertEqual(make_demo.call_args.args[0], draft)
+
+    def test_demo_failure_preserves_private_draft_and_exposes_retry(self):
+        self.make_old("reel.txt", b"https://www.instagram.com/reel/ABC123/")
+        draft = self.root / "private-library" / "drafts" / "ABC123" / "SKILL.md"
+        draft.parent.mkdir(parents=True)
+        draft.write_text("A skill", encoding="utf-8")
+        with patch.object(worker, "transcribe", return_value=self.transcript()), \
+             patch.object(worker, "generate", return_value=self.result("skillable")), \
+             patch.object(worker, "save_draft", return_value=draft), \
+             patch.object(worker, "create_demo", side_effect=WorkflowError("modelo indisponible")):
+            self.assertEqual(worker.process_inbox(self.root / "config.json"), (1, 0))
+        saved = json.loads(self.state.read_text(encoding="utf-8"))["ABC123"]
+        self.assertEqual(saved["status"], "draft")
+        self.assertIn("modelo indisponible", saved["demo_error"])
+
+    def test_silent_video_can_refresh_from_saved_visual_evidence(self):
+        job = self.jobs / "ABC123"
+        job.mkdir(parents=True)
+        worker._save_transcript(job, {"transcripcion": "", "duracion_seg": 12,
+                                      "n_segmentos": 0, "fuente": "video sin audio"}, "base")
+        self.assertEqual(worker._saved_transcript(job)["transcripcion"], "")
+
     def test_new_video_waits_for_drive_sync(self):
         (self.inbox / "nuevo.mov").write_bytes(b"video")
+        with patch.object(worker, "transcribe") as transcribe:
+            self.assertEqual(worker.process_inbox(self.root / "config.json"), (0, 0))
+        transcribe.assert_not_called()
+
+    def test_scheduled_pass_does_not_regenerate_draft_while_demo_runs(self):
+        self.make_old("reel.txt", b"https://www.instagram.com/reel/ABC123/")
+        self.state_dir.mkdir()
+        self.state.write_text(json.dumps({"ABC123": {"status": "demo_processing"}}), encoding="utf-8")
         with patch.object(worker, "transcribe") as transcribe:
             self.assertEqual(worker.process_inbox(self.root / "config.json"), (0, 0))
         transcribe.assert_not_called()
@@ -183,11 +225,13 @@ class InboxTests(unittest.TestCase):
                               encoding="utf-8")
         new = self.result("skillable") | {"title": "Versión nueva"}
         with patch.object(worker, "transcribe") as transcribe, \
-             patch.object(worker, "generate", return_value=new), \
+             patch.object(worker, "generate", return_value=new) as generate, \
              patch.object(worker, "save_draft", return_value=self.root / "draft" / "SKILL.md") as save:
             self.assertEqual(worker.process_inbox(self.root / "config.json",
-                             ProcessOptions(target_id="ABC123", refresh_draft=True)), (1, 0))
+                             ProcessOptions(target_id="ABC123", refresh_draft=True,
+                                            feedback="La muestra omite el primer paso visual")), (1, 0))
         transcribe.assert_not_called()
+        self.assertEqual(generate.call_args.kwargs["revision_feedback"], "La muestra omite el primer paso visual")
         self.assertTrue(save.call_args.kwargs["update"])
         history = next((self.jobs / "ABC123" / "history").iterdir())
         self.assertEqual(json.loads((history / "result.json").read_text(encoding="utf-8"))["title"], "Versión anterior")

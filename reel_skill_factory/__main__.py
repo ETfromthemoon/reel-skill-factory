@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -35,6 +36,7 @@ def main() -> int:
                        help="usa la transcripción editada guardada en .local-state/jobs/<ID>/transcript.txt")
     retry.add_argument("--refresh-draft", action="store_true",
                        help="regenera un borrador local usando transcripción y frames guardados")
+    retry.add_argument("--feedback", help="indica qué corregir al regenerar el borrador")
     status = sub.add_parser("status", help="muestra resultados y rutas de revisión")
     status.add_argument("item_id", nargs="?")
     vault = sub.add_parser("vault", help="actualiza o abre la bóveda local")
@@ -43,6 +45,8 @@ def main() -> int:
     evaluation.add_argument("item_id")
     evaluation.add_argument("--scenario", required=True)
     evaluation.add_argument("--expected", required=True)
+    demo = sub.add_parser("demo", help="crea una demostración automática para un borrador existente")
+    demo.add_argument("item_id")
     activation = sub.add_parser("activate", help="aprueba e instala localmente una skill evaluada")
     activation.add_argument("item_id")
     activation.add_argument("--target", type=Path, action="append", help="carpeta adicional de skills del agente")
@@ -68,6 +72,17 @@ def main() -> int:
     if args.command == "evaluate":
         print(evaluate(load_config(args.config), args.item_id, args.scenario, args.expected))
         return 0
+    if args.command == "demo":
+        from .demo import create_demo
+        from .library import draft_dir
+        config = load_config(args.config)
+        record = load_state().get(args.item_id, {})
+        if record.get("status") != "draft":
+            raise WorkflowError("Este video no tiene un borrador listo")
+        job = JOBS_DIR / args.item_id
+        result = json.loads((job / "result.json").read_text(encoding="utf-8"))
+        print(create_demo(draft_dir(config, args.item_id) / "SKILL.md", job, result))
+        return 0
     if args.command == "activate":
         for path in activate(load_config(args.config), args.item_id, targets=args.target,
                              accept_gaps=args.accept_gaps):
@@ -85,7 +100,7 @@ def main() -> int:
             parser.error("--refresh-draft usa la transcripción guardada; no acepta --model")
         options = ProcessOptions(target_id=args.item_id, model_override=args.model,
                                  use_saved_transcript=args.use_transcript,
-                                 refresh_draft=args.refresh_draft)
+                                 refresh_draft=args.refresh_draft, feedback=args.feedback)
         _, failures = process_inbox(args.config, options)
         return 1 if failures else 0
     if args.command == "once":

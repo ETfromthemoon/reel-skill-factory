@@ -14,6 +14,7 @@ from pathlib import Path
 
 from .core import ROOT, TIMESTAMP, WorkflowError, generate, load_config, transcribe
 from .library import draft_dir, save_draft
+from .demo import create_demo
 from .inputs import InboxItem, inbox_files, read_inbox_item
 from .visual import inspect_video
 from .vault import write_vault
@@ -31,6 +32,7 @@ class ProcessOptions:
     model_override: str | None = None
     use_saved_transcript: bool = False
     refresh_draft: bool = False
+    feedback: str | None = None
 
 
 def _write_text(path: Path, value: str) -> None:
@@ -116,6 +118,9 @@ def _saved_transcript(job_dir: Path) -> dict:
     except (OSError, json.JSONDecodeError) as exc:
         raise WorkflowError("No hay una transcripción guardada para este video; usa retry sin --use-transcript") from exc
     lines = [line for line in transcript.splitlines() if line.strip()]
+    if not lines and metadata.get("method") == "video sin audio":
+        return {"transcripcion": "", "duracion_seg": metadata.get("duration_seconds"),
+                "n_segmentos": 0, "fuente": "video sin audio"}
     if not lines or any(not TIMESTAMP.match(line) for line in lines):
         raise WorkflowError("Cada línea de la transcripción editada debe comenzar con [mm:ss] o [hh:mm:ss]")
     return {"transcripcion": transcript, "duracion_seg": metadata.get("duration_seconds"),
@@ -123,7 +128,8 @@ def _saved_transcript(job_dir: Path) -> dict:
 
 
 def _analyze(item: InboxItem, model: str, job_dir: Path, visual: dict, *,
-             use_saved: bool = False, force_whisper: bool = False) -> tuple[dict, dict]:
+             use_saved: bool = False, force_whisper: bool = False,
+             feedback: str | None = None) -> tuple[dict, dict]:
     attempt = _attempt_dir(job_dir, "edited" if use_saved else model)
     with tempfile.TemporaryDirectory(prefix="reel-skill-") as temp:
         workdir = Path(temp)
@@ -141,7 +147,7 @@ def _analyze(item: InboxItem, model: str, job_dir: Path, visual: dict, *,
         _save_transcript(attempt, transcript, "edited" if use_saved else model)
         try:
             result = generate(item.source, transcript, workdir, source_type=item.source_type,
-                              visual=visual)
+                              visual=visual, revision_feedback=feedback)
         finally:
             for name in ("source-map.json", "source-map-revision.json", "generation.json", "fidelity.json",
                          "revision.json", "fidelity-revision.json"):
@@ -177,7 +183,8 @@ def _process_item(item: InboxItem, config, state: dict, options: ProcessOptions)
     visual = inspect_video(item.media, job_dir,
                            max_frames=getattr(config, "visual_max_frames", 48))
     use_saved = options.use_saved_transcript or options.refresh_draft
-    transcript, result = _analyze(item, model, job_dir, visual, use_saved=use_saved)
+    transcript, result = _analyze(item, model, job_dir, visual, use_saved=use_saved,
+                                  feedback=options.feedback)
     chosen_model = "edited" if use_saved else model
     fallback_error = None
     fallback = config.review_whisper_model
@@ -208,6 +215,14 @@ def _process_item(item: InboxItem, config, state: dict, options: ProcessOptions)
     _write_json(STATE_PATH, state)
     if result["status"] == "skillable":
         record["draft_path"] = str(draft_path)
+        record["status"] = "demo_processing"
+        state[item.item_id] = record
+        _write_json(STATE_PATH, state)
+        if draft_path.is_file():
+            try:
+                create_demo(draft_path, job_dir, result)
+            except (OSError, ValueError, WorkflowError) as exc:
+                record["demo_error"] = str(exc)
         record["status"] = "draft"
         print(f"Borrador local: {draft_path}", flush=True)
     else:
@@ -218,6 +233,8 @@ def process_inbox(config_path: Path, options: ProcessOptions | None = None) -> t
     options = options or ProcessOptions()
     if (options.use_saved_transcript or options.refresh_draft) and not options.target_id:
         raise WorkflowError("--use-transcript requiere un ID de video")
+    if options.feedback and (not options.refresh_draft or not 10 <= len(options.feedback.strip()) <= 2000):
+        raise WorkflowError("La corrección requiere --refresh-draft y un comentario de 10 a 2000 caracteres")
     config = load_config(config_path)
     count = failures = 0
     found_target = False
@@ -245,7 +262,7 @@ def process_inbox(config_path: Path, options: ProcessOptions | None = None) -> t
                 if options.refresh_draft and (previous.get("status") not in {"draft", "needs_review"}
                                               or not (draft_dir(config, key) / "SKILL.md").is_file()):
                     raise WorkflowError("Solo se puede actualizar un borrador existente")
-                if previous.get("status") in {"draft", "not_skillable", "needs_review"} and not options.target_id:
+                if previous.get("status") in {"draft", "demo_processing", "not_skillable", "needs_review"} and not options.target_id:
                     continue
                 if previous.get("status") == "failed" and not options.retry_failed and not options.target_id:
                     continue

@@ -126,12 +126,13 @@ def transcribe(url: str, model: str, workdir: Path) -> dict:
 
 
 def _model_json(prompt_name: str, schema_name: str, output_name: str, workdir: Path,
-                payload: dict, image_paths: list[Path] | None = None) -> dict:
+                payload: dict, image_paths: list[Path] | None = None, *, search: bool = True) -> dict:
     prompt = (ROOT / "prompts" / prompt_name).read_text(encoding="utf-8")
     output_file = workdir / output_name
     command = ["codex", "exec", "--sandbox", "read-only", "--skip-git-repo-check",
          "--ephemeral", "--ignore-user-config", "--strict-config",
-         "-c", 'web_search="live"', "-c", "skills.include_instructions=false",
+         "-c", 'web_search="live"' if search else 'web_search="disabled"',
+         "-c", "skills.include_instructions=false",
          "-c", "skills.max_context_tokens=100", "-c", "features.shell_tool=false",
          "--output-schema", str(ROOT / "prompts" / schema_name),
          "--output-last-message", str(output_file), "--cd", str(workdir)]
@@ -214,7 +215,8 @@ def validate_fidelity(review: dict, source_map: dict) -> None:
 
 
 def generate(source: str, transcript: dict, workdir: Path, *, source_type: str = "reel_url",
-             visual: dict | None = None, task_intent: str | None = None) -> dict:
+             visual: dict | None = None, task_intent: str | None = None,
+             revision_feedback: str | None = None) -> dict:
     duration = transcript.get("duracion_seg")
     rounded_duration = (math.ceil(duration) if isinstance(duration, (int, float))
                         and math.isfinite(duration) and duration >= 0 else None)
@@ -240,7 +242,8 @@ def generate(source: str, transcript: dict, workdir: Path, *, source_type: str =
                                            "validation_error": str(exc)}, image_paths)
         validate_source_map(source_map, transcript["transcripcion"], visual)
     result = _model_json("create_skill.md", "skill_schema.json", "generation.json",
-                         workdir, {"video_data_json": data, "source_map_json": source_map}, image_paths)
+                         workdir, {"video_data_json": data, "source_map_json": source_map,
+                                   "revision_feedback": revision_feedback}, image_paths)
     validate_generation(result, transcript["transcripcion"], visual)
     if result["status"] == "skillable" and not source_map["lessons"]:
         raise WorkflowError("No se puede crear una skill sin enseñanzas verificables")

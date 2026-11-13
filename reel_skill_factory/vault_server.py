@@ -11,9 +11,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs
 
 from .core import WorkflowError, load_config
+from .demo import create_demo, read_demo, skill_revision
 from .lifecycle import activate, evaluate
+from .library import draft_dir
 from .vault import render_vault
-from .worker import JOBS_DIR, STATE_DIR, load_state
+from .worker import JOBS_DIR, STATE_DIR, STATE_PATH, ProcessOptions, _write_json, load_state, process_inbox, worker_lock
 
 
 def serve(config_path, port: int = 8766) -> None:
@@ -25,6 +27,30 @@ def serve(config_path, port: int = 8766) -> None:
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
+            if self.path.startswith("/demo/"):
+                item_id = self.path.removeprefix("/demo/")
+                if not re.fullmatch(r"[A-Za-z0-9_-]+", item_id):
+                    self.send_error(404)
+                    return
+                try:
+                    draft = draft_dir(config, item_id) / "SKILL.md"
+                    demo = read_demo(JOBS_DIR / item_id, skill_revision(draft))
+                    html = demo.get("preview_html") if demo else None
+                    if not isinstance(html, str) or not html or len(html) > 60_000:
+                        raise ValueError("Vista no disponible")
+                except (OSError, ValueError, WorkflowError):
+                    self.send_error(404)
+                    return
+                body = html.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             if self.path.startswith("/frame/"):
                 item_id = self.path.removeprefix("/frame/")
                 if not re.fullmatch(r"[A-Za-z0-9_-]+", item_id):
@@ -54,7 +80,7 @@ def serve(config_path, port: int = 8766) -> None:
             body = page.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Security-Policy", "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'")
+            self.send_header("Content-Security-Policy", "default-src 'none'; img-src 'self'; frame-src 'self'; style-src 'unsafe-inline'; form-action 'self'")
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -77,27 +103,48 @@ def serve(config_path, port: int = 8766) -> None:
             data = parse_qs(self.rfile.read(length).decode("utf-8"), strict_parsing=True)
             one = lambda key: data[key][0] if len(data.get(key, [])) == 1 else None
             item_id, action = one("item_id"), one("action")
-            if one("token") != token or not item_id or action not in {"evaluate", "activate"}:
+            if one("token") != token or not item_id or action not in {"evaluate", "activate", "correct", "demo"}:
                 self.send_error(403)
                 return
-            if action == "activate" and one("confirm") != "yes":
-                self.send_error(403)
+            if action == "correct" and not 10 <= len((one("feedback") or "").strip()) <= 2000:
+                self.send_error(400)
                 return
             with lock:
                 if item_id in busy:
                     self.send_error(409)
                     return
                 busy.add(item_id)
-                activity[item_id] = "Evaluando…" if action == "evaluate" else "Activando…"
+                activity[item_id] = {"evaluate": "Evaluando…", "activate": "Activando…",
+                                     "correct": "Corrigiendo borrador y preparando nueva muestra…",
+                                     "demo": "Preparando demostración…"}[action]
 
             def work():
                 try:
                     if action == "evaluate":
                         path = evaluate(config, item_id, one("scenario") or "", one("expected") or "")
                         message = f"Prueba terminada: {path}. Revisa los archivos y el resultado."
-                    else:
+                    elif action == "activate":
                         paths = activate(config, item_id, accept_gaps=True)
                         message = "Skill aprobada e instalada localmente: " + ", ".join(map(str, paths))
+                    elif action == "demo":
+                        with worker_lock():
+                            draft = draft_dir(config, item_id) / "SKILL.md"
+                            job = JOBS_DIR / item_id
+                            result = json.loads((job / "result.json").read_text(encoding="utf-8"))
+                            path = create_demo(draft, job, result)
+                            state = load_state()
+                            if state.get(item_id, {}).get("status") == "demo_processing":
+                                state[item_id]["status"] = "draft"
+                                state[item_id].pop("demo_error", None)
+                                _write_json(STATE_PATH, state)
+                        message = f"Demostración preparada: {path}"
+                    else:
+                        _, failures = process_inbox(config_path, ProcessOptions(
+                            target_id=item_id, refresh_draft=True, feedback=one("feedback")))
+                        if failures:
+                            record = load_state().get(item_id, {})
+                            raise WorkflowError(record.get("retry_error") or record.get("error") or "No se pudo corregir")
+                        message = "Borrador corregido. Revisa la nueva demostración."
                 except (WorkflowError, OSError, ValueError) as exc:
                     message = f"Error: {exc}"
                 with lock:
