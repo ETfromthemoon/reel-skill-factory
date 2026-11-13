@@ -27,6 +27,34 @@ def serve(config_path, port: int = 8766) -> None:
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
+            if self.path.startswith("/motion/"):
+                match = re.fullmatch(r"/motion/([A-Za-z0-9_-]+)/([0-2])", self.path)
+                if not match:
+                    self.send_error(404)
+                    return
+                item_id, index = match.group(1), int(match.group(2))
+                try:
+                    draft = draft_dir(config, item_id) / "SKILL.md"
+                    demo = read_demo(JOBS_DIR / item_id, skill_revision(draft))
+                    names = demo.get("motion_screenshots", []) if demo else []
+                    name = names[index]
+                    if not re.fullmatch(r"motion-[a-f0-9]{16}-[0-2]\.png", name):
+                        raise ValueError("Captura inválida")
+                    shot = (JOBS_DIR / item_id / name).resolve()
+                    if not shot.is_relative_to(JOBS_DIR.resolve()) or shot.stat().st_size > 2_000_000:
+                        raise ValueError("Captura no disponible")
+                    body = shot.read_bytes()
+                except (OSError, ValueError, IndexError, TypeError, WorkflowError):
+                    self.send_error(404)
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             if self.path.startswith("/demo/"):
                 item_id = self.path.removeprefix("/demo/")
                 if not re.fullmatch(r"[A-Za-z0-9_-]+", item_id):

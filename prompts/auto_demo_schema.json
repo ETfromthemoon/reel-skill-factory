@@ -1,12 +1,14 @@
 {
   "type": "object",
   "additionalProperties": false,
-  "required": ["scenario", "expected", "sample_output_md", "preview_html", "checklist", "limitations"],
+  "required": ["proof_kind", "scenario", "expected", "sample_output_md", "preview_html", "motion_stages", "checklist", "limitations"],
   "properties": {
+    "proof_kind": {"type": "string", "enum": ["document", "interface_static", "interface_motion", "code"]},
     "scenario": {"type": "string"},
     "expected": {"type": "string"},
     "sample_output_md": {"type": "string"},
     "preview_html": {"type": "string"},
+    "motion_stages": {"type": "array", "items": {"type": "string"}, "minItems": 0, "maxItems": 3},
     "checklist": {"type": "array", "items": {"type": "string"}},
     "limitations": {"type": "array", "items": {"type": "string"}}
   }

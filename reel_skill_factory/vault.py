@@ -7,10 +7,10 @@ import re
 from html import escape
 from pathlib import Path
 
-from .demo import read_demo, skill_revision
+from .demo import motion_evidence_ready, read_demo, requires_motion, skill_revision
 
 
-STYLE = """body{font:16px system-ui,sans-serif;max-width:980px;margin:36px auto;padding:0 20px;background:#f7f6f2;color:#20232b}h1{font-size:2rem}p{line-height:1.5}.grid{display:grid;gap:18px}.card{background:white;border:1px solid #ddd;border-radius:16px;padding:22px;box-shadow:0 2px 10px #0001}.meta{color:#626873;font-size:.9rem;overflow-wrap:anywhere}.badge{display:inline-block;background:#e7f4ec;color:#176438;border-radius:99px;padding:4px 10px}a{color:#185caa}details{margin-top:14px;border-top:1px solid #eee;padding-top:12px}summary{cursor:pointer;font-weight:650}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.5 ui-monospace,monospace;background:#f5f5f5;padding:16px;border-radius:10px}img{max-width:180px;max-height:130px;object-fit:cover;border-radius:8px;float:right;margin:0 0 12px 16px}form{clear:both;margin:16px 0;padding:14px;border:1px solid #ddd;border-radius:10px}label{display:block;margin:8px 0;font-weight:600}textarea{display:block;width:100%;min-height:64px;box-sizing:border-box;margin-top:5px;font:inherit}button{background:#176438;color:white;border:0;border-radius:8px;padding:10px 14px;cursor:pointer;font:inherit}button.caution{background:#8a4700}button:focus-visible,summary:focus-visible,textarea:focus-visible{outline:3px solid #185caa;outline-offset:2px}.hint{background:#eef3fa;border-left:4px solid #185caa;padding:12px 16px;border-radius:8px}.warning{background:#fff4e6;border-left:4px solid #ae5a00;padding:12px 16px;border-radius:8px}@media(max-width:600px){img{float:none;display:block;margin:0 0 12px}}"""
+STYLE = """body{font:16px system-ui,sans-serif;max-width:980px;margin:36px auto;padding:0 20px;background:#f7f6f2;color:#20232b}h1{font-size:2rem}p{line-height:1.5}.grid{display:grid;gap:18px}.card{background:white;border:1px solid #ddd;border-radius:16px;padding:22px;box-shadow:0 2px 10px #0001}.meta{color:#626873;font-size:.9rem;overflow-wrap:anywhere}.badge{display:inline-block;background:#e7f4ec;color:#176438;border-radius:99px;padding:4px 10px}a{color:#185caa}details{margin-top:14px;border-top:1px solid #eee;padding-top:12px}summary{cursor:pointer;font-weight:650}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.5 ui-monospace,monospace;background:#f5f5f5;padding:16px;border-radius:10px}img{max-width:180px;max-height:130px;object-fit:cover;border-radius:8px;float:right;margin:0 0 12px 16px}.motion-frames{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.motion-frames figure{margin:0}.motion-frames img{float:none;display:block;width:100%;max-width:none;max-height:none;aspect-ratio:3/2;object-fit:contain;background:#17191e}.motion-frames figcaption{font-size:.8rem;line-height:1.35;margin-top:6px}form{clear:both;margin:16px 0;padding:14px;border:1px solid #ddd;border-radius:10px}label{display:block;margin:8px 0;font-weight:600}textarea{display:block;width:100%;min-height:64px;box-sizing:border-box;margin-top:5px;font:inherit}button{background:#176438;color:white;border:0;border-radius:8px;padding:10px 14px;cursor:pointer;font:inherit}button.caution{background:#8a4700}button:focus-visible,summary:focus-visible,textarea:focus-visible{outline:3px solid #185caa;outline-offset:2px}.hint{background:#eef3fa;border-left:4px solid #185caa;padding:12px 16px;border-radius:8px}.warning{background:#fff4e6;border-left:4px solid #ae5a00;padding:12px 16px;border-radius:8px}@media(max-width:600px){img{float:none;display:block;margin:0 0 12px}.motion-frames{grid-template-columns:1fr}}"""
 STATUS_LABELS = {"draft": "Borrador privado", "processing": "Procesando", "failed": "Error",
                  "needs_review": "Requiere revisión", "not_skillable": "Sin skill reutilizable",
                  "skillable": "Creando borrador", "demo_processing": "Preparando demostración"}
@@ -86,17 +86,34 @@ def render_vault(state: dict, jobs_dir: Path, state_dir: Path, *, token: str | N
             if demo:
                 judgment = demo.get("judgment") if isinstance(demo.get("judgment"), dict) else {}
                 verdict = judgment.get("verdict")
+                kind = demo.get("proof_kind", "legacy")
+                kind_label = {"document": "Documento", "code": "Código", "interface_static": "Interfaz estática",
+                              "interface_motion": "Interfaz con movimiento", "legacy": "Muestra anterior"}.get(kind, "Muestra")
                 link += ('<section class="hint"><h3>Demostración preparada por el workflow</h3>'
                          '<p class="meta">Es una muestra generada, no una ejecución comprobada en tu proyecto.</p>'
+                         f'<p><strong>Tipo de prueba:</strong> {_text(kind_label)}</p>'
                          f'<p><strong>Revisión:</strong> {_text(judgment.get("summary"))}</p>')
                 if verdict != "pass":
                     link += '<p class="warning">La muestra requiere revisión antes de aprobar.</p>'
                 if demo.get("preview_html"):
                     link += (f'<iframe src="/demo/{_text(item_id)}" title="Vista de ejemplo de {_text(title)}" '
                              'sandbox="" loading="lazy" style="width:100%;height:390px;border:1px solid #aaa;border-radius:8px;background:white"></iframe>'
-                             '<p class="meta">Vista estática: scripts y recursos externos bloqueados.</p>')
+                             '<p class="meta">Prototipo local: scripts y recursos externos bloqueados.</p>')
                 else:
                     link += f'<pre>{_text(demo.get("sample_output_md"))}</pre>'
+                shots = demo.get("motion_screenshots") if isinstance(demo.get("motion_screenshots"), list) else []
+                stages = demo.get("motion_stages") if isinstance(demo.get("motion_stages"), list) else []
+                if kind == "interface_motion":
+                    if shots and token:
+                        link += '<h4>Movimiento observado en navegador</h4><div class="motion-frames">'
+                        for index, name in enumerate(shots[:3]):
+                            if re.fullmatch(r"motion-[a-f0-9]{16}-[0-2]\.png", str(name)):
+                                label = stages[index] if index < len(stages) else f"Estado {index + 1}"
+                                link += (f'<figure><img src="/motion/{_text(item_id)}/{index}" alt="Estado {index + 1} de la demostración">'
+                                         f'<figcaption>{_text(label)}</figcaption></figure>')
+                        link += '</div>'
+                    else:
+                        link += '<p class="warning">Aún no hay fotogramas observados de este prototipo.</p>'
                 link += (f'<details><summary>Leer caso y criterios</summary><p><strong>Caso:</strong> {_text(demo.get("scenario"))}</p>'
                          f'<p><strong>Resultado esperado:</strong> {_text(demo.get("expected"))}</p></details>')
                 if demo.get("preview_html"):
@@ -146,8 +163,13 @@ def render_vault(state: dict, jobs_dir: Path, state_dir: Path, *, token: str | N
             review = manual_review or demo
             if review:
                 verdict = review.get("judgment", {}).get("verdict")
-                label = ("Aprobar e instalar" if verdict == "pass" else "Aprobar con vacíos e instalar")
-                caution = '' if verdict == "pass" else ' class="caution"'
+                motion = requires_motion(result.get("source_map", {}))
+                motion_proven = motion_evidence_ready(jobs_dir / item_id, demo)
+                passed = verdict == "pass" and (not motion or motion_proven)
+                label = ("Aprobar e instalar" if passed else "Aprobar con vacíos e instalar")
+                caution = '' if passed else ' class="caution"'
+                if motion and not motion_proven:
+                    link += '<p class="warning">El movimiento todavía no está demostrado; revisa los estados antes de instalar.</p>'
                 link += (f'<form method="post" action="/action"><input type="hidden" name="token" value="{_text(token)}">'
                          f'<input type="hidden" name="item_id" value="{_text(item_id)}">'
                          f'<button{caution} name="action" value="activate">{label}</button></form>')

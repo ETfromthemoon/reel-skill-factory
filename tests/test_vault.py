@@ -78,6 +78,36 @@ class VaultTests(unittest.TestCase):
             self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", html)
             self.assertNotIn("<script>alert(1)</script>", html)
 
+    def test_motion_demo_shows_observed_stages_and_cautions_without_them(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            job = root / "jobs" / "ABC123"
+            job.mkdir(parents=True)
+            skill = root / "private" / "SKILL.md"
+            skill.parent.mkdir()
+            skill.write_text("Motion skill", encoding="utf-8")
+            revision = hashlib.sha256(skill.read_text(encoding="utf-8").encode()).hexdigest()
+            (job / "result.json").write_text(json.dumps({
+                "source_map": {"thesis": "Animación de interfaz", "lessons": []}
+            }), encoding="utf-8")
+            demo = {"status": "ready", "revision": revision, "proof_kind": "interface_motion",
+                    "scenario": "Animate a dashboard", "expected": "Three visible states",
+                    "preview_html": "<html><body>Demo</body></html>", "motion_stages": ["Uno", "Dos", "Tres"],
+                    "motion_screenshots": [], "judgment": {"verdict": "pass", "summary": "Claim", "gaps": []}}
+            (job / "auto-demo.json").write_text(json.dumps(demo), encoding="utf-8")
+            state = {"ABC123": {"status": "draft", "draft_path": str(skill)}}
+            html = render_vault(state, root / "jobs", root, token="test")
+            self.assertIn("El movimiento todavía no está demostrado", html)
+            self.assertIn("Aprobar con vacíos", html)
+            demo["motion_screenshots"] = [f"motion-{revision[:16]}-{i}.png" for i in range(3)]
+            for index, name in enumerate(demo["motion_screenshots"]):
+                (job / name).write_bytes(b"PNG" + bytes([index]))
+            (job / "auto-demo.json").write_text(json.dumps(demo), encoding="utf-8")
+            html = render_vault(state, root / "jobs", root, token="test")
+            self.assertIn("Movimiento observado en navegador", html)
+            self.assertIn('src="/motion/ABC123/0"', html)
+            self.assertIn("Aprobar e instalar", html)
+
     def test_review_after_failed_correction_still_offers_feedback(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

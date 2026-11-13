@@ -73,6 +73,23 @@ class PrivateLifecycleTests(unittest.TestCase):
         activation = json.loads((self.job / "activation.json").read_text(encoding="utf-8"))
         self.assertEqual(activation["review_mode"], "generated_demo")
 
+    def test_motion_skill_needs_motion_evidence_for_clean_approval(self):
+        self.job.mkdir(parents=True)
+        revision = hashlib.sha256(self.skill.encode()).hexdigest()
+        (self.job / "result.json").write_text(json.dumps({
+            "source_map": {"thesis": "Animación de interfaz", "lessons": []}
+        }), encoding="utf-8")
+        (self.job / "auto-demo.json").write_text(json.dumps({
+            "status": "ready", "revision": revision, "proof_kind": "interface_static",
+            "judgment": {"verdict": "pass", "gaps": []},
+        }), encoding="utf-8")
+        with patch.object(lifecycle, "_job", return_value=(self.job, self.draft)):
+            with self.assertRaisesRegex(WorkflowError, "vacíos"):
+                lifecycle.activate(self.config, "ABC123", targets=[self.root / "agent"])
+            lifecycle.activate(self.config, "ABC123", targets=[self.root / "agent"], accept_gaps=True)
+        activation = json.loads((self.job / "activation.json").read_text(encoding="utf-8"))
+        self.assertFalse(activation["motion_evidence"])
+
     def test_sync_uses_private_catalog_and_preserves_local_edits(self):
         approved = self.config.library_dir / "approved" / "example"
         approved.mkdir(parents=True)
