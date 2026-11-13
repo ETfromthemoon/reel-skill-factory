@@ -13,6 +13,7 @@ from .worker import ProcessOptions, print_status, process_inbox
 from .vault import write_vault
 from .vault_server import serve
 from .lifecycle import activate, evaluate, sync_approved
+from .setup_config import configure
 from .worker import JOBS_DIR, STATE_DIR, load_state
 
 
@@ -23,6 +24,8 @@ def main() -> int:
     doctor = sub.add_parser("doctor", help="comprueba equipo, herramientas e integraciones")
     doctor.add_argument("--preinstall", action="store_true")
     doctor.add_argument("--url", help="Reel público para probar acceso de yt-dlp")
+    configuration = sub.add_parser("configure", help="guarda la carpeta de entrada privada")
+    configuration.add_argument("--inbox", required=True, type=Path)
     once = sub.add_parser("once", help="procesa videos y enlaces nuevos una vez")
     once.add_argument("--retry-failed", action="store_true")
     retry = sub.add_parser("retry", help="reprocesa un video concreto, incluso si necesita revisión")
@@ -50,6 +53,9 @@ def main() -> int:
     args = parser.parse_args()
     if args.command == "doctor":
         return diagnose(args.config, preinstall=args.preinstall, sample_url=args.url)
+    if args.command == "configure":
+        print(configure(args.config, args.inbox))
+        return 0
     if args.command == "status":
         print_status(args.item_id)
         return 0

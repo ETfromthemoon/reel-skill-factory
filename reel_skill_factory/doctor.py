@@ -69,7 +69,8 @@ def diagnose(config_path: Path, *, preinstall: bool = False, sample_url: str | N
 
     def report(level: str, label: str, detail: str = "") -> None:
         nonlocal hard_fail
-        print(f"{level:7} {label}" + (f": {detail}" if detail else ""))
+        shown = "INSTALAR" if preinstall and level == "FALTA" else level
+        print(f"{shown:7} {label}" + (f": {detail}" if detail else ""))
         if level == "FALTA" and not preinstall:
             hard_fail = True
 

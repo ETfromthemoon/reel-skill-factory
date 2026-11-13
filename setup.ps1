@@ -1,6 +1,8 @@
 param(
     [switch]$SkipModelDownload,
-    [switch]$SkipDriveDesktop
+    [switch]$SkipDriveDesktop,
+    [string]$InboxDir,
+    [switch]$NoAutostart
 )
 
 $ErrorActionPreference = 'Stop'
@@ -100,5 +102,33 @@ if ($SkipModelDownload) { $runtimeArgs += '--skip-model' }
 & $venvPython @runtimeArgs
 if ($LASTEXITCODE -ne 0) { throw 'No se pudo preparar FFmpeg o Whisper.' }
 
-Write-Host 'Dependencias instaladas. Configura config.local.json, autentica Codex y ejecuta:'
-Write-Host '  .\.venv\Scripts\python.exe -m reel_skill_factory doctor'
+if (-not $InboxDir) {
+    $existingConfig = Join-Path $PSScriptRoot 'config.local.json'
+    if (Test-Path -LiteralPath $existingConfig) {
+        $InboxDir = (Get-Content -LiteralPath $existingConfig -Raw | ConvertFrom-Json).inbox_dir
+    } elseif ([Console]::IsInputRedirected) {
+        throw 'Indica la carpeta sincronizada con -InboxDir "RUTA" para completar la instalación.'
+    } else {
+        Write-Host 'Abre Google Drive para escritorio, inicia sesión y elige o crea una carpeta para recibir videos.'
+        $InboxDir = Read-Host 'Pega aquí la ruta de esa carpeta EN ESTE COMPUTADOR'
+    }
+}
+& $venvPython -m reel_skill_factory configure --inbox $InboxDir
+if ($LASTEXITCODE -ne 0) { throw 'No se pudo configurar la carpeta de entrada.' }
+
+& codex login status *> $null
+if ($LASTEXITCODE -ne 0) {
+    if ([Console]::IsInputRedirected) {
+        throw 'Inicia sesión con codex login y repite el instalador.'
+    }
+    Write-Host 'Se abrirá el inicio de sesión de Codex; vuelve aquí al terminar.'
+    & codex login
+    if ($LASTEXITCODE -ne 0) { throw 'No se completó el inicio de sesión de Codex.' }
+}
+& $venvPython -m reel_skill_factory doctor
+if ($LASTEXITCODE -ne 0) { throw 'El diagnóstico detectó un requisito pendiente; revisa las líneas FALTA.' }
+if (-not $NoAutostart) {
+    & (Join-Path $PSScriptRoot 'scripts\install-windows-task.ps1')
+    if ($LASTEXITCODE -ne 0) { throw 'No se pudo instalar el inicio automático.' }
+}
+Write-Host 'Instalación terminada. Sube un video a la carpeta elegida y abre la Bóveda de Skills desde el escritorio.'

@@ -1,5 +1,6 @@
 import tempfile
 import hashlib
+import json
 import unittest
 from pathlib import Path
 
@@ -41,6 +42,17 @@ class VaultTests(unittest.TestCase):
             html = render_vault({"../outside": {"status": "draft"}}, root / "jobs", root)
             self.assertNotIn("../outside", html)
 
+    def test_interactive_vault_shows_local_first_frame(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            job = root / "jobs" / "ABC123"
+            job.mkdir(parents=True)
+            frame = job / "first.jpg"
+            frame.write_bytes(b"test")
+            (job / "visual.json").write_text(json.dumps({"frames": [{"image": str(frame)}]}), encoding="utf-8")
+            html = render_vault({"ABC123": {"status": "draft"}}, root / "jobs", root, token="test")
+            self.assertIn('src="/frame/ABC123"', html)
+
     def test_interactive_vault_shows_review_gate_and_escapes_report(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -54,9 +66,12 @@ class VaultTests(unittest.TestCase):
                               '"summary":"<script>","gaps":["Sin navegador"]}}', encoding="utf-8")
             html = render_vault({"ABC123": {"status": "draft", "draft_path": str(skill)}}, root / "jobs", root,
                                 token="local-token")
-            self.assertIn("Probar en entorno aislado", html)
-            self.assertIn("Revisé la prueba", html)
+            self.assertIn("Probar este borrador", html)
+            self.assertIn("Cómo probar una skill, paso a paso", html)
+            self.assertIn("Confirmo que revisé el resultado y los vacíos", html)
             self.assertIn("Sin navegador", html)
+            self.assertIn("La prueba no creó archivos", html)
+            self.assertNotIn('http-equiv="refresh"', html)
             self.assertNotIn("<script>", html)
 
 
