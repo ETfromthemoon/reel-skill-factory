@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import secrets
 import threading
+import json
+import re
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs
 
@@ -22,6 +25,28 @@ def serve(config_path, port: int = 8766) -> None:
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
+            if self.path.startswith("/frame/"):
+                item_id = self.path.removeprefix("/frame/")
+                if not re.fullmatch(r"[A-Za-z0-9_-]+", item_id):
+                    self.send_error(404)
+                    return
+                try:
+                    visual = json.loads((JOBS_DIR / item_id / "visual.json").read_text(encoding="utf-8"))
+                    frame = Path(visual["frames"][0]["image"]).resolve()
+                    if (not frame.is_relative_to(JOBS_DIR.resolve()) or frame.suffix.lower() not in {".jpg", ".jpeg", ".png"}
+                            or not frame.is_file() or frame.stat().st_size > 2_000_000):
+                        raise ValueError("Frame no permitido")
+                    body = frame.read_bytes()
+                except (OSError, ValueError, KeyError, IndexError, TypeError):
+                    self.send_error(404)
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png" if frame.suffix.lower() == ".png" else "image/jpeg")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             if self.path != "/":
                 self.send_error(404)
                 return
@@ -29,7 +54,7 @@ def serve(config_path, port: int = 8766) -> None:
             body = page.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'")
+            self.send_header("Content-Security-Policy", "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'")
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()

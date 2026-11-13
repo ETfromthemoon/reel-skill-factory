@@ -4,12 +4,16 @@ cd "$(dirname "$0")"
 
 skip_model=0
 skip_drive=0
-for option in "$@"; do
+inbox_dir=
+while [ "$#" -gt 0 ]; do
+    option=$1
     case "$option" in
         --skip-model-download) skip_model=1 ;;
         --skip-drive-desktop) skip_drive=1 ;;
+        --inbox) shift; inbox_dir=${1:-}; [ -n "$inbox_dir" ] || { echo 'Falta la ruta después de --inbox' >&2; exit 2; } ;;
         *) echo "Opción desconocida: $option" >&2; exit 2 ;;
     esac
+    shift
 done
 
 install_linux_package() {
@@ -128,4 +132,22 @@ if [ "$skip_model" -eq 1 ]; then
 else
     .venv/bin/python scripts/prepare_runtime.py
 fi
-echo 'Dependencias instaladas. Configura config.local.json, autentica Codex y ejecuta: .venv/bin/python -m reel_skill_factory doctor'
+if [ -z "$inbox_dir" ] && [ -f config.local.json ]; then
+    inbox_dir=$(.venv/bin/python -c 'import json; print(json.load(open("config.local.json", encoding="utf-8"))["inbox_dir"])')
+fi
+if [ -z "$inbox_dir" ]; then
+    if [ ! -t 0 ]; then
+        echo 'Indica la carpeta local sincronizada con --inbox RUTA.' >&2
+        exit 1
+    fi
+    printf 'Ruta local de la carpeta donde llegarán los videos: '
+    IFS= read -r inbox_dir
+fi
+.venv/bin/python -m reel_skill_factory configure --inbox "$inbox_dir"
+if ! codex login status >/dev/null 2>&1; then
+    if [ ! -t 0 ]; then echo 'Inicia sesión con codex login y repite el instalador.' >&2; exit 1; fi
+    echo 'Completa el inicio de sesión de Codex.'
+    codex login
+fi
+.venv/bin/python -m reel_skill_factory doctor
+echo 'Instalación terminada. Para procesar videos, inicia .venv/bin/python -m reel_skill_factory watch y abre .venv/bin/python -m reel_skill_factory vault --serve en otra sesión.'
