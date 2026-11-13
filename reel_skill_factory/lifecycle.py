@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .core import Config, WorkflowError, run
 from .library import SLUG, approved_dir, draft_dir, write_json, write_text
-from .demo import read_demo
+from .demo import motion_evidence_ready, read_demo, requires_motion
 from .worker import JOBS_DIR, load_state
 
 
@@ -185,7 +185,10 @@ def activate(config: Config, item_id: str, *, targets: list[Path] | None = None,
     if not matching and not demo:
         raise WorkflowError("La versión actual del borrador necesita una demostración o prueba terminada")
     review = matching[-1] if matching else demo
-    if review.get("judgment", {}).get("verdict") != "pass" and not accept_gaps:
+    source_result = json.loads((job / "result.json").read_text(encoding="utf-8")) if (job / "result.json").is_file() else {}
+    motion = requires_motion(source_result.get("source_map", {}))
+    motion_proven = motion_evidence_ready(job, demo)
+    if (review.get("judgment", {}).get("verdict") != "pass" or (motion and not motion_proven)) and not accept_gaps:
         raise WorkflowError("El evaluador dejó vacíos: revísalos y usa --accept-gaps si los comprobaste")
     metadata = json.loads((draft / "metadata.json").read_text(encoding="utf-8"))
     name = metadata.get("slug")
@@ -216,5 +219,6 @@ def activate(config: Config, item_id: str, *, targets: list[Path] | None = None,
     _write_json(job / "activation.json", {"revision": revision, "approved": str(approved_skill),
                 "sha256": revision,
                 "installed": [str(p) for p in installed], "accepted_gaps": accept_gaps,
-                "review_mode": "manual_trial" if matching else "generated_demo"})
+                "review_mode": "manual_trial" if matching else "generated_demo",
+                "motion_evidence": motion_proven})
     return installed

@@ -94,6 +94,10 @@ def diagnose(config_path: Path, *, preinstall: bool = False, sample_url: str | N
                            "from watch_skill.watch import watch; import rapidocr"], timeout=30)
     report("OK" if visual_ready else "FALTA", "Watch Skill + OCR",
            "módulos importables" if visual_ready else "repite el instalador")
+    from .demo import _browser
+    browser = _browser()
+    report("OK" if browser else "REVISAR", "Navegador para pruebas de movimiento",
+           str(browser) if browser else "instala Edge o Chrome/Chromium para capturar tres estados animados")
 
     config: Config | None = None
     if config_path.is_file():
