@@ -43,7 +43,7 @@ class PrivateLifecycleTests(unittest.TestCase):
 
     def test_activation_requires_review_of_current_hash(self):
         with patch.object(lifecycle, "_job", return_value=(self.job, self.draft)):
-            with self.assertRaisesRegex(WorkflowError, "prueba terminada"):
+            with self.assertRaisesRegex(WorkflowError, "demostración o prueba terminada"):
                 lifecycle.activate(self.config, "ABC123", targets=[self.root / "agent"])
         self.assertFalse((self.config.library_dir / "approved").exists())
 
@@ -59,6 +59,19 @@ class PrivateLifecycleTests(unittest.TestCase):
         self.assertEqual(installed[0].read_text(encoding="utf-8"), self.skill)
         self.assertEqual((self.config.library_dir / "approved" / "example" / "SKILL.md").read_text(encoding="utf-8"), self.skill)
         self.assertNotIn("pr", json.loads((self.job / "activation.json").read_text(encoding="utf-8")))
+
+    def test_automatic_demo_is_enough_for_one_click_human_approval(self):
+        self.job.mkdir(parents=True)
+        (self.job / "auto-demo.json").write_text(json.dumps({
+            "status": "ready", "mode": "generated_demo",
+            "revision": hashlib.sha256(self.skill.encode()).hexdigest(),
+            "judgment": {"verdict": "pass", "summary": "Caso cubierto", "gaps": []},
+        }), encoding="utf-8")
+        with patch.object(lifecycle, "_job", return_value=(self.job, self.draft)):
+            installed = lifecycle.activate(self.config, "ABC123", targets=[self.root / "agent"])
+        self.assertEqual(installed[0].read_text(encoding="utf-8"), self.skill)
+        activation = json.loads((self.job / "activation.json").read_text(encoding="utf-8"))
+        self.assertEqual(activation["review_mode"], "generated_demo")
 
     def test_sync_uses_private_catalog_and_preserves_local_edits(self):
         approved = self.config.library_dir / "approved" / "example"

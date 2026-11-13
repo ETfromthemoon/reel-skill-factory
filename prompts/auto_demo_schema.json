@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["scenario", "expected", "sample_output_md", "preview_html", "checklist", "limitations"],
+  "properties": {
+    "scenario": {"type": "string"},
+    "expected": {"type": "string"},
+    "sample_output_md": {"type": "string"},
+    "preview_html": {"type": "string"},
+    "checklist": {"type": "array", "items": {"type": "string"}},
+    "limitations": {"type": "array", "items": {"type": "string"}}
+  }
+}

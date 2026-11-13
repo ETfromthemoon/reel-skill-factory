@@ -24,9 +24,9 @@ Abre Terminal en la carpeta extraída y ejecuta `sh setup.sh`. Introduce la ruta
 
 1. Desde el teléfono, sube un `.mp4` corto, propio o autorizado, a la carpeta de Drive. Espera a que aparezca en el computador. Un enlace de Drive a un video no equivale al archivo de video; para un Reel público usa un `.txt` con su enlace.
 2. En Windows espera hasta cinco minutos; en macOS/Linux deja el trabajador `watch` abierto. En la bóveda pulsa «Actualizar progreso».
-3. Abre «Qué enseñaba el video», «Leer skill» y «Contraste y adaptaciones» para decidir si el borrador corresponde al video.
-4. Abre «Cómo probar una skill, paso a paso». Describe una tarea que esa skill debería resolver y un resultado concreto. Pulsa «Probar este borrador» y espera; vuelve a pulsar «Actualizar progreso».
-5. Examina el resultado, los archivos y los vacíos. Si te convence, marca la revisión y pulsa «Aprobar e instalar en mis agentes». La skill se copia a las carpetas locales de Codex y de agentes; nunca se sube al repositorio público.
+3. El workflow prepara automáticamente un caso, una muestra y una revisión. Si la skill crea interfaces, verás una vista HTML estática. Pulsa «Actualizar progreso» si aún aparece «Preparando demostración».
+4. Abre «Qué enseñaba el video», «Leer skill» y «Contraste y adaptaciones». Compara esos apartados con la demostración, sus límites y sus vacíos.
+5. Si falta algo, abre «Pedir corrección», describe el problema y pulsa «Corregir borrador y repetir demostración». Si te convence, pulsa «Aprobar e instalar». La skill se copia a las carpetas locales de Codex y de agentes; nunca se sube al repositorio público.
 
 ## Si algo no avanza
 
