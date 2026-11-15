@@ -73,6 +73,62 @@ class PrivateLifecycleTests(unittest.TestCase):
         activation = json.loads((self.job / "activation.json").read_text(encoding="utf-8"))
         self.assertEqual(activation["review_mode"], "generated_demo")
 
+    def test_activation_accepts_custom_name_without_invalidating_reviewed_draft(self):
+        self.job.mkdir(parents=True)
+        revision = hashlib.sha256(self.skill.encode()).hexdigest()
+        (self.job / "auto-demo.json").write_text(json.dumps({
+            "status": "ready", "revision": revision,
+            "judgment": {"verdict": "pass", "gaps": []},
+        }), encoding="utf-8")
+        target_root = self.root / "agent"
+        with patch.object(lifecycle, "_job", return_value=(self.job, self.draft)):
+            installed = lifecycle.activate(self.config, "ABC123", targets=[target_root], name="better-name")
+        self.assertEqual(installed[0].parent.name, "better-name")
+        self.assertTrue(installed[0].read_text(encoding="utf-8").startswith("---\nname: better-name\n"))
+        self.assertEqual((self.draft / "SKILL.md").read_text(encoding="utf-8"), self.skill)
+        self.assertEqual(json.loads((self.job / "activation.json").read_text(encoding="utf-8"))["revision"], revision)
+
+    def test_rename_installed_updates_catalog_targets_and_manifest(self):
+        self.job.mkdir(parents=True)
+        revision = hashlib.sha256(self.skill.encode()).hexdigest()
+        (self.job / "auto-demo.json").write_text(json.dumps({
+            "status": "ready", "revision": revision, "judgment": {"verdict": "pass", "gaps": []},
+        }), encoding="utf-8")
+        target_root = self.root / "agent"
+        with patch.object(lifecycle, "_job", return_value=(self.job, self.draft)), \
+             patch.object(lifecycle, "JOBS_DIR", self.root / "jobs"):
+            old = lifecycle.activate(self.config, "ABC123", targets=[target_root])[0]
+            new = lifecycle.rename_installed(self.config, "ABC123", "better-name")[0]
+        self.assertFalse(old.exists())
+        self.assertEqual(new.parent.name, "better-name")
+        self.assertTrue(new.read_text(encoding="utf-8").startswith("---\nname: better-name\n"))
+        self.assertFalse((self.config.library_dir / "approved" / "example").exists())
+        self.assertTrue((self.config.library_dir / "approved" / "better-name" / "SKILL.md").is_file())
+        manifest = json.loads((self.config.library_dir / "installed-skills.json").read_text(encoding="utf-8"))
+        self.assertNotIn(str(old), manifest)
+        self.assertIn(str(new), manifest)
+        self.assertEqual(json.loads((self.job / "activation.json").read_text(encoding="utf-8"))["name"], "better-name")
+
+    def test_rename_rejects_collisions_and_preserves_local_edits(self):
+        self.job.mkdir(parents=True)
+        revision = hashlib.sha256(self.skill.encode()).hexdigest()
+        (self.job / "auto-demo.json").write_text(json.dumps({
+            "status": "ready", "revision": revision, "judgment": {"verdict": "pass", "gaps": []},
+        }), encoding="utf-8")
+        target_root = self.root / "agent"
+        with patch.object(lifecycle, "_job", return_value=(self.job, self.draft)), \
+             patch.object(lifecycle, "JOBS_DIR", self.root / "jobs"):
+            old = lifecycle.activate(self.config, "ABC123", targets=[target_root])[0]
+            collision = target_root / "occupied" / "SKILL.md"
+            collision.parent.mkdir()
+            collision.write_text("Another skill", encoding="utf-8")
+            with self.assertRaisesRegex(WorkflowError, "Ya existe"):
+                lifecycle.rename_installed(self.config, "ABC123", "occupied")
+            old.write_text("Personal edit", encoding="utf-8")
+            with self.assertRaisesRegex(WorkflowError, "modificada"):
+                lifecycle.rename_installed(self.config, "ABC123", "better-name")
+        self.assertEqual(old.read_text(encoding="utf-8"), "Personal edit")
+
     def test_motion_skill_needs_motion_evidence_for_clean_approval(self):
         self.job.mkdir(parents=True)
         revision = hashlib.sha256(self.skill.encode()).hexdigest()

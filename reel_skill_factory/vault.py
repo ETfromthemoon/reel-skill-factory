@@ -14,6 +14,7 @@ STYLE = """body{font:16px system-ui,sans-serif;max-width:980px;margin:36px auto;
 STATUS_LABELS = {"draft": "Borrador privado", "processing": "Procesando", "failed": "Error",
                  "needs_review": "Requiere revisión", "not_skillable": "Sin skill reutilizable",
                  "skillable": "Creando borrador", "demo_processing": "Preparando demostración"}
+STYLE += "input[name=skill_name]{display:block;box-sizing:border-box;width:100%;padding:10px;margin-top:5px;font:inherit;border:1px solid #aaa;border-radius:8px}input[name=skill_name]:focus-visible{outline:3px solid #185caa;outline-offset:2px}code{font:600 1em ui-monospace,monospace}"
 
 
 def _text(value: object) -> str:
@@ -64,12 +65,43 @@ def render_vault(state: dict, jobs_dir: Path, state_dir: Path, *, token: str | N
             except (OSError, ValueError):
                 pass
         title = _text(result.get("title") or item_id)
-        activated = (jobs_dir / item_id / "activation.json").exists()
+        activation_path = jobs_dir / item_id / "activation.json"
+        activated = activation_path.exists()
+        activation = {}
+        if activated:
+            try:
+                activation = json.loads(activation_path.read_text(encoding="utf-8"))
+                if not isinstance(activation, dict):
+                    activation = {}
+            except (OSError, ValueError):
+                pass
         status = "Activa" if activated else _text(STATUS_LABELS.get(record.get("status"), "Pendiente"))
         description = _text(result.get("description") or record.get("error") or "En proceso o pendiente de revisión.")
         draft_path = record.get("draft_path", "")
+        draft_name = result.get("slug", "")
+        if draft_path and Path(draft_path).is_file():
+            try:
+                draft_name = json.loads((Path(draft_path).parent / "metadata.json").read_text(encoding="utf-8")).get("slug", draft_name)
+            except (OSError, ValueError):
+                pass
+        installed_name = activation.get("name") or Path(activation.get("approved", "")).parent.name
+        skill_name = installed_name if activated else draft_name
+        if not isinstance(skill_name, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", skill_name):
+            skill_name = ""
         link = (f'<details><summary>Dónde se guarda</summary><p class="meta">Archivo privado: {_text(draft_path)}</p></details>'
                 if draft_path else "")
+        if skill_name:
+            link += (f'<p class="hint"><strong>{"Invócala en Codex" if activated else "Nombre propuesto para Codex"}:</strong> '
+                     f'<code>${_text(skill_name)}</code></p>')
+        if activated:
+            paths = activation.get("installed") if isinstance(activation.get("installed"), list) else []
+            if paths:
+                link += '<details><summary>Dónde está instalada</summary><ul>'
+                link += ''.join(f'<li class="meta">{_text(path)}</li>' for path in paths)
+                link += '</ul></details>'
+        activity_text = (activity or {}).get(item_id)
+        if activity_text:
+            link += f'<p class="meta">{_text(activity_text)}</p>'
         if record.get("status") == "needs_review" and draft_path:
             link += '<p class="meta">El borrador anterior permanece; esta regeneración necesita revisión.</p>'
         if token and record.get("status") == "demo_processing" and draft_path:
@@ -78,9 +110,6 @@ def render_vault(state: dict, jobs_dir: Path, state_dir: Path, *, token: str | N
                      f'<input type="hidden" name="item_id" value="{_text(item_id)}">'
                      '<button name="action" value="demo">Reintentar demostración si quedó detenida</button></form>')
         if token and record.get("status") == "draft" and not activated:
-            activity_text = (activity or {}).get(item_id)
-            if activity_text:
-                link += f'<p class="meta">{_text(activity_text)}</p>'
             current_hash = (skill_revision(Path(draft_path)) if draft_path and Path(draft_path).is_file() else "")
             demo = read_demo(jobs_dir / item_id, current_hash) if current_hash else None
             if demo:
@@ -172,6 +201,8 @@ def render_vault(state: dict, jobs_dir: Path, state_dir: Path, *, token: str | N
                     link += '<p class="warning">El movimiento todavía no está demostrado; revisa los estados antes de instalar.</p>'
                 link += (f'<form method="post" action="/action"><input type="hidden" name="token" value="{_text(token)}">'
                          f'<input type="hidden" name="item_id" value="{_text(item_id)}">'
+                         f'<label>Nombre para invocar e instalar<input name="skill_name" value="{_text(skill_name)}" '
+                         'pattern="[a-z0-9]+(-[a-z0-9]+)*" maxlength="48" required></label>'
                          f'<button{caution} name="action" value="activate">{label}</button></form>')
             link += (f'<details><summary>¿La muestra o la skill no corresponde al video? Pedir corrección</summary>'
                      f'<form method="post" action="/action"><input type="hidden" name="token" value="{_text(token)}">'
@@ -187,6 +218,14 @@ def render_vault(state: dict, jobs_dir: Path, state_dir: Path, *, token: str | N
                      '<button name="action" value="correct">Volver a corregir el borrador</button></form>')
         if activated:
             link += '<p class="badge">Aprobada e instalada localmente</p>'
+            if token and skill_name:
+                link += (f'<details><summary>Cambiar el nombre de esta skill instalada</summary>'
+                         f'<form method="post" action="/action"><input type="hidden" name="token" value="{_text(token)}">'
+                         f'<input type="hidden" name="item_id" value="{_text(item_id)}">'
+                         f'<label>Nuevo nombre<input name="skill_name" value="{_text(skill_name)}" '
+                         'pattern="[a-z0-9]+(-[a-z0-9]+)*" maxlength="48" required></label>'
+                         '<p class="meta">Se actualizarán la biblioteca privada y las carpetas locales donde se instaló.</p>'
+                         '<button name="action" value="rename">Guardar nuevo nombre</button></form></details>')
         skill = result.get("instructions_md", "")
         details = ""
         if skill:

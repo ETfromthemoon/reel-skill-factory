@@ -116,6 +116,41 @@ class VaultTests(unittest.TestCase):
             self.assertIn("Volver a corregir el borrador", html)
             self.assertNotIn('value="activate"', html)
 
+    def test_shows_invocation_and_rename_for_installed_skill(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            job = root / "jobs" / "ABC123"
+            job.mkdir(parents=True)
+            (job / "activation.json").write_text(json.dumps({
+                "name": "better-name", "approved": str(root / "approved" / "better-name" / "SKILL.md"),
+                "installed": [str(root / "agent" / "better-name" / "SKILL.md")],
+            }), encoding="utf-8")
+            html = render_vault({"ABC123": {"status": "draft"}}, root / "jobs", root, token="test")
+            self.assertIn("$better-name", html)
+            self.assertIn("Dónde está instalada", html)
+            self.assertIn('value="rename"', html)
+            self.assertIn('name="skill_name" value="better-name"', html)
+
+    def test_approval_form_lets_user_choose_install_name(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            job = root / "jobs" / "ABC123"
+            job.mkdir(parents=True)
+            (job / "result.json").write_text('{"slug":"suggested-name"}', encoding="utf-8")
+            draft = root / "draft" / "SKILL.md"
+            draft.parent.mkdir()
+            draft.write_text("Skill", encoding="utf-8")
+            revision = hashlib.sha256(b"Skill").hexdigest()
+            (job / "auto-demo.json").write_text(json.dumps({
+                "status": "ready", "revision": revision,
+                "judgment": {"verdict": "pass", "gaps": []},
+            }), encoding="utf-8")
+            html = render_vault({"ABC123": {"status": "draft", "draft_path": str(draft)}},
+                                root / "jobs", root, token="test")
+            self.assertIn("$suggested-name", html)
+            self.assertIn('name="skill_name" value="suggested-name"', html)
+            self.assertIn('value="activate"', html)
+
     def test_interactive_vault_shows_review_gate_and_escapes_report(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

@@ -13,7 +13,7 @@ from .doctor import diagnose
 from .worker import ProcessOptions, print_status, process_inbox
 from .vault import write_vault
 from .vault_server import serve
-from .lifecycle import activate, evaluate, sync_approved
+from .lifecycle import activate, evaluate, rename_installed, sync_approved
 from .setup_config import configure
 from .worker import JOBS_DIR, STATE_DIR, load_state
 
@@ -51,6 +51,10 @@ def main() -> int:
     activation.add_argument("item_id")
     activation.add_argument("--target", type=Path, action="append", help="carpeta adicional de skills del agente")
     activation.add_argument("--accept-gaps", action="store_true", help="confirmo que revisé los vacíos del evaluador")
+    activation.add_argument("--name", help="nombre para invocar la skill: minúsculas y guiones")
+    rename = sub.add_parser("rename", help="cambia el nombre de una skill ya instalada por este workflow")
+    rename.add_argument("item_id")
+    rename.add_argument("name")
     synchronize = sub.add_parser("sync-skills", help="instala skills aprobadas de la biblioteca privada")
     synchronize.add_argument("--target", type=Path, action="append", help="carpeta de skills del agente")
     sub.add_parser("watch", help="vigila la carpeta mientras este proceso esté abierto")
@@ -85,7 +89,11 @@ def main() -> int:
         return 0
     if args.command == "activate":
         for path in activate(load_config(args.config), args.item_id, targets=args.target,
-                             accept_gaps=args.accept_gaps):
+                             accept_gaps=args.accept_gaps, name=args.name):
+            print(path)
+        return 0
+    if args.command == "rename":
+        for path in rename_installed(load_config(args.config), args.item_id, args.name):
             print(path)
         return 0
     if args.command == "sync-skills":
