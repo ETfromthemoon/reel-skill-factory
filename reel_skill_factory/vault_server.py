@@ -12,7 +12,7 @@ from urllib.parse import parse_qs
 
 from .core import WorkflowError, load_config
 from .demo import create_demo, read_demo, skill_revision
-from .lifecycle import activate, evaluate
+from .lifecycle import activate, evaluate, rename_installed
 from .library import draft_dir
 from .vault import render_vault
 from .worker import JOBS_DIR, STATE_DIR, STATE_PATH, ProcessOptions, _write_json, load_state, process_inbox, worker_lock
@@ -131,10 +131,14 @@ def serve(config_path, port: int = 8766) -> None:
             data = parse_qs(self.rfile.read(length).decode("utf-8"), strict_parsing=True)
             one = lambda key: data[key][0] if len(data.get(key, [])) == 1 else None
             item_id, action = one("item_id"), one("action")
-            if one("token") != token or not item_id or action not in {"evaluate", "activate", "correct", "demo"}:
+            if one("token") != token or not item_id or action not in {"evaluate", "activate", "correct", "demo", "rename"}:
                 self.send_error(403)
                 return
             if action == "correct" and not 10 <= len((one("feedback") or "").strip()) <= 2000:
+                self.send_error(400)
+                return
+            if action in {"activate", "rename"} and (len(one("skill_name") or "") > 48 or not re.fullmatch(
+                    r"[a-z0-9]+(?:-[a-z0-9]+)*", one("skill_name") or "")):
                 self.send_error(400)
                 return
             with lock:
@@ -144,7 +148,8 @@ def serve(config_path, port: int = 8766) -> None:
                 busy.add(item_id)
                 activity[item_id] = {"evaluate": "Evaluando…", "activate": "Activando…",
                                      "correct": "Corrigiendo borrador y preparando nueva muestra…",
-                                     "demo": "Preparando demostración…"}[action]
+                                     "demo": "Preparando demostración…",
+                                     "rename": "Cambiando nombre de la skill instalada…"}[action]
 
             def work():
                 try:
@@ -152,8 +157,11 @@ def serve(config_path, port: int = 8766) -> None:
                         path = evaluate(config, item_id, one("scenario") or "", one("expected") or "")
                         message = f"Prueba terminada: {path}. Revisa los archivos y el resultado."
                     elif action == "activate":
-                        paths = activate(config, item_id, accept_gaps=True)
+                        paths = activate(config, item_id, accept_gaps=True, name=one("skill_name"))
                         message = "Skill aprobada e instalada localmente: " + ", ".join(map(str, paths))
+                    elif action == "rename":
+                        paths = rename_installed(config, item_id, one("skill_name"))
+                        message = f"Skill renombrada. Invócala como ${one('skill_name')}. Instalada en " + ", ".join(map(str, paths))
                     elif action == "demo":
                         with worker_lock():
                             draft = draft_dir(config, item_id) / "SKILL.md"

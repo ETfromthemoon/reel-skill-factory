@@ -47,7 +47,7 @@ Cada borrador nuevo llega con un caso de ejemplo, criterios, una muestra aplicad
 
 La «Prueba adicional opcional» permite que tú plantees otro caso; su informe queda en `.local-state/jobs/ID/evaluations/`. El sandbox limita escrituras, pero no es una máquina virtual aislada de las lecturas del equipo. En este entorno Windows Codex puede iniciar en solo lectura incluso al solicitar `workspace-write`; en ese caso la prueba indica el vacío y no afirma haber validado archivos ni el navegador.
 
-Cuando estés conforme, pulsa **Aprobar e instalar**. Si la revisión señala vacíos, el botón lo indica expresamente. La skill pasa a `~/.reel-skill-factory/library/approved/NOMBRE/SKILL.md` y se copia a `~/.codex/skills` y `~/.agents/skills`. No hay publicación remota. Para otro agente, indica su carpeta de skills con `activate ID --target RUTA` o `sync-skills --target RUTA`. La sincronización no reemplaza ediciones locales ajenas.
+Cuando estés conforme, escribe el **nombre para invocar e instalar** junto al botón **Aprobar e instalar**. Usa minúsculas, números y guiones, por ejemplo `mejorar-interfaz`. En Codex puedes pedir `Usa $mejorar-interfaz para revisar esta pantalla`. La bóveda muestra el comando `$nombre` y las rutas donde se instaló. Si ya aprobaste la skill, abre **Cambiar el nombre de esta skill instalada** y guarda otro nombre: el workflow actualiza la biblioteca privada y las carpetas locales gestionadas. No reemplaza un nombre ocupado ni ediciones manuales. Si la revisión señala vacíos, el botón de aprobación lo indica expresamente. La skill pasa a `~/.reel-skill-factory/library/approved/NOMBRE/SKILL.md` y se copia a `~/.codex/skills` y `~/.agents/skills`. No hay publicación remota. Para otro agente, indica su carpeta de skills con `activate ID --target RUTA` o `sync-skills --target RUTA`.
 
 Comandos útiles (usa el Python de `.venv`):
 
@@ -57,7 +57,8 @@ python -m reel_skill_factory retry ID --refresh-draft
 python -m reel_skill_factory retry ID --refresh-draft --feedback "Qué falta o qué corregir"
 python -m reel_skill_factory demo ID
 python -m reel_skill_factory evaluate ID --scenario "Caso concreto..." --expected "Resultado esperado..."
-python -m reel_skill_factory activate ID
+python -m reel_skill_factory activate ID --name mi-skill
+python -m reel_skill_factory rename ID otro-nombre
 python -m reel_skill_factory sync-skills
 ```
 

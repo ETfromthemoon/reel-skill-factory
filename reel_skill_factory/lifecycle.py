@@ -172,7 +172,7 @@ def evaluate(config: Config, item_id: str, scenario: str, expected: str) -> Path
 
 
 def activate(config: Config, item_id: str, *, targets: list[Path] | None = None,
-             accept_gaps: bool = False) -> list[Path]:
+             accept_gaps: bool = False, name: str | None = None) -> list[Path]:
     """Approve one reviewed private draft and install it for local code agents."""
     job, draft = _job(config, item_id)
     skill = (draft / "SKILL.md").read_text(encoding="utf-8")
@@ -191,34 +191,105 @@ def activate(config: Config, item_id: str, *, targets: list[Path] | None = None,
     if (review.get("judgment", {}).get("verdict") != "pass" or (motion and not motion_proven)) and not accept_gaps:
         raise WorkflowError("El evaluador dejó vacíos: revísalos y usa --accept-gaps si los comprobaste")
     metadata = json.loads((draft / "metadata.json").read_text(encoding="utf-8"))
-    name = metadata.get("slug")
-    if not isinstance(name, str) or not SLUG.fullmatch(name) or not skill.startswith(f"---\nname: {name}\n"):
+    original_name = metadata.get("slug")
+    if not isinstance(original_name, str) or not SLUG.fullmatch(original_name) or not skill.startswith(f"---\nname: {original_name}\n"):
         raise WorkflowError("El borrador tiene un nombre de skill inválido")
+    name = original_name if name is None else name.strip()
+    if not SLUG.fullmatch(name) or len(name) > 48:
+        raise WorkflowError("Usa un nombre de hasta 48 caracteres: minúsculas, números y guiones")
+    if (job / "activation.json").exists():
+        raise WorkflowError("Esta skill ya está instalada; usa rename para cambiar su nombre")
+    installed_skill = skill.replace(f"---\nname: {original_name}\n", f"---\nname: {name}\n", 1)
+    installed_revision = hashlib.sha256(installed_skill.encode()).hexdigest()
     approved = approved_dir(config) / name
     approved_skill = approved / "SKILL.md"
-    if approved_skill.exists() and approved_skill.read_text(encoding="utf-8") != skill:
+    if approved.exists() or approved.is_symlink():
         raise WorkflowError(f"Ya hay otra skill aprobada con el nombre {name}")
     destinations = targets or [Path.home() / ".codex" / "skills", Path.home() / ".agents" / "skills"]
     for root in destinations:
         target = root.expanduser() / name / "SKILL.md"
-        if target.exists() and target.read_text(encoding="utf-8") != skill:
+        if target.parent.exists() or target.parent.is_symlink():
             raise WorkflowError(f"Ya existe una skill distinta en {target}; no se reemplazó")
-    write_text(approved_skill, skill)
+    write_text(approved_skill, installed_skill)
     write_text(approved / "source.md", (draft / "source.md").read_text(encoding="utf-8"))
     write_json(approved / "metadata.json", {"item_id": item_id, "slug": name,
-               "sha256": revision, "approved_at": datetime.now(timezone.utc).isoformat()})
+               "sha256": installed_revision, "source_revision": revision,
+               "approved_at": datetime.now(timezone.utc).isoformat()})
     installed = []
     for root in destinations:
         target = root.expanduser() / name / "SKILL.md"
-        write_text(target, skill)
+        write_text(target, installed_skill)
         installed.append(target)
     manifest_path = config.library_dir / "installed-skills.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
-    manifest.update({str(path): revision for path in installed})
+    manifest.update({str(path): installed_revision for path in installed})
     write_json(manifest_path, manifest)
     _write_json(job / "activation.json", {"revision": revision, "approved": str(approved_skill),
-                "sha256": revision,
+                "name": name, "sha256": installed_revision,
                 "installed": [str(p) for p in installed], "accepted_gaps": accept_gaps,
                 "review_mode": "manual_trial" if matching else "generated_demo",
                 "motion_evidence": motion_proven})
     return installed
+
+
+def rename_installed(config: Config, item_id: str, new_name: str) -> list[Path]:
+    """Rename a workflow-owned installation after checking every old and new path."""
+    if not ID.fullmatch(item_id) or not SLUG.fullmatch(new_name) or len(new_name) > 48:
+        raise WorkflowError("Usa un nombre de hasta 48 caracteres: minúsculas, números y guiones")
+    job = JOBS_DIR / item_id
+    activation_path = job / "activation.json"
+    try:
+        activation = json.loads(activation_path.read_text(encoding="utf-8"))
+        old_approved = Path(activation["approved"])
+        old_name = old_approved.parent.name
+        targets = [Path(value) for value in activation["installed"]]
+        old_content = old_approved.read_text(encoding="utf-8")
+        manifest_path = config.library_dir / "installed-skills.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise WorkflowError("No se pudo leer la instalación local de esta skill") from exc
+    if new_name == old_name:
+        return targets
+    if (not SLUG.fullmatch(old_name) or old_approved != approved_dir(config) / old_name / "SKILL.md"
+            or not old_content.startswith(f"---\nname: {old_name}\n") or not isinstance(manifest, dict)
+            or hashlib.sha256(old_content.encode()).hexdigest() != activation.get("sha256")):
+        raise WorkflowError("La instalación aprobada cambió; no se renombró")
+    old_folder = old_approved.parent
+    if (old_folder.is_symlink() or old_approved.is_symlink()
+            or {path.name for path in old_folder.iterdir()} != {"SKILL.md", "source.md", "metadata.json"}
+            or any((old_folder / name).is_symlink() for name in ("source.md", "metadata.json"))):
+        raise WorkflowError("La carpeta aprobada contiene archivos adicionales o enlaces; no se renombró")
+    for path in targets:
+        if (path.name != "SKILL.md" or path.parent.name != old_name or path.is_symlink()
+                or path.parent.is_symlink() or not path.is_file()
+                or path.read_text(encoding="utf-8") != old_content
+                or manifest.get(str(path)) != activation["sha256"]
+                or {entry.name for entry in path.parent.iterdir()} != {"SKILL.md"}):
+            raise WorkflowError(f"La instalación local fue modificada: {path}; no se renombró")
+    new_content = old_content.replace(f"---\nname: {old_name}\n", f"---\nname: {new_name}\n", 1)
+    new_hash = hashlib.sha256(new_content.encode()).hexdigest()
+    new_approved = approved_dir(config) / new_name
+    new_targets = [path.parent.parent / new_name / "SKILL.md" for path in targets]
+    if new_approved.exists() or new_approved.is_symlink() or any(
+            path.parent.exists() or path.parent.is_symlink() for path in new_targets):
+        raise WorkflowError(f"Ya existe una skill con el nombre {new_name}; no se reemplazó")
+    approved_metadata = json.loads((old_folder / "metadata.json").read_text(encoding="utf-8"))
+    approved_metadata.update({"slug": new_name, "sha256": new_hash})
+    for path in [new_approved / "SKILL.md", *new_targets]:
+        write_text(path, new_content)
+    write_text(new_approved / "source.md", (old_folder / "source.md").read_text(encoding="utf-8"))
+    write_json(new_approved / "metadata.json", approved_metadata)
+    for old, new in zip(targets, new_targets):
+        manifest.pop(str(old), None)
+        manifest[str(new)] = new_hash
+    activation.update({"approved": str(new_approved / "SKILL.md"), "installed": [str(path) for path in new_targets],
+                       "name": new_name, "sha256": new_hash})
+    write_json(manifest_path, manifest)
+    _write_json(activation_path, activation)
+    for path in targets:
+        path.unlink()
+        path.parent.rmdir()
+    for name in ("SKILL.md", "source.md", "metadata.json"):
+        (old_folder / name).unlink()
+    old_folder.rmdir()
+    return new_targets
