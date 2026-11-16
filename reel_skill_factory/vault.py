@@ -15,7 +15,7 @@ STATUS_LABELS = {"draft": "Borrador privado", "processing": "Procesando", "faile
                  "needs_review": "Requiere revisión", "not_skillable": "Sin skill reutilizable",
                  "skillable": "Creando borrador", "demo_processing": "Preparando demostración"}
 STYLE += "input[name=skill_name]{display:block;box-sizing:border-box;width:100%;padding:10px;margin-top:5px;font:inherit;border:1px solid #aaa;border-radius:8px}input[name=skill_name]:focus-visible{outline:3px solid #185caa;outline-offset:2px}code{font:600 1em ui-monospace,monospace}"
-STYLE += ".card{margin:0}.card>summary{display:list-item}.card-title{display:block;font-size:1.25rem;margin:8px 0 0}.card>summary .meta{display:block;margin-top:4px}.card-content{margin-top:14px}"
+STYLE += ".card{margin:0}.card>summary{display:list-item}.card-title{display:block;font-size:1.25rem;margin:8px 0 0}.card>summary .meta{display:block;margin-top:4px;font-weight:400}.card-content{margin-top:14px}.example pre{max-height:260px;overflow:auto}.example iframe{height:300px}"
 
 
 def _text(value: object) -> str:
@@ -88,7 +88,7 @@ def render_vault(state: dict, jobs_dir: Path, state_dir: Path, *, token: str | N
                          f'<p>{_text(demo.get("scenario"))}</p>')
                 if demo.get("preview_html"):
                     link += (f'<iframe src="/demo/{_text(item_id)}" title="Vista de ejemplo de {_text(title)}" '
-                             'sandbox="" loading="lazy" style="width:100%;height:390px;border:1px solid #aaa;border-radius:8px;background:white"></iframe>'
+                             'sandbox="" loading="lazy" style="width:100%;border:1px solid #aaa;border-radius:8px;background:white"></iframe>'
                              '<p class="meta">Ejemplo generado para esta revisión.</p>')
                 elif demo.get("sample_output_md"):
                     link += f'<pre>{_text(demo.get("sample_output_md"))}</pre>'
