@@ -27,12 +27,11 @@ class VaultTests(unittest.TestCase):
             self.assertIn("Revisar &lt;script&gt;", html)
             self.assertIn("Borrador privado", html)
             self.assertNotIn("<script>", html)
-            self.assertIn("Por qué se creó", html)
-            self.assertIn("Qué enseñaba el video", html)
+            self.assertIn("El video enseña", html)
             self.assertIn("Enseña &lt;script&gt;", html)
-            self.assertIn("Contraste y adaptaciones", html)
-            self.assertIn("Evidencia del video (1)", html)
-            self.assertIn("C:/private/ABC123/SKILL.md", html)
+            self.assertNotIn("Contraste y adaptaciones", html)
+            self.assertNotIn("Evidencia del video (1)", html)
+            self.assertNotIn("C:/private/ABC123/SKILL.md", html)
             self.assertNotIn("github.com", html)
             self.assertTrue(write_vault(state, root / "jobs", root).is_file())
 
@@ -41,6 +40,15 @@ class VaultTests(unittest.TestCase):
             root = Path(temp)
             html = render_vault({"../outside": {"status": "draft"}}, root / "jobs", root)
             self.assertNotIn("../outside", html)
+
+    def test_only_one_draft_opens_by_default(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            state = {"A": {"status": "draft"}, "B": {"status": "draft"},
+                     "C": {"status": "processing"}}
+            html = render_vault(state, root / "jobs", root, token="test")
+            self.assertEqual(html.count('<details class="card" open>'), 1)
+            self.assertEqual(html.count('<details class="card">'), 2)
 
     def test_interactive_vault_shows_local_first_frame(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -58,6 +66,10 @@ class VaultTests(unittest.TestCase):
             root = Path(temp)
             job = root / "jobs" / "ABC123"
             job.mkdir(parents=True)
+            (job / "result.json").write_text(json.dumps({
+                "slug": "tarjeta-cafe", "source_map": {"thesis": "Diseñar tarjetas útiles"},
+                "fidelity_review": {"summary": "Sigue la idea del video", "issues": []},
+            }), encoding="utf-8")
             skill = root / "private" / "SKILL.md"
             skill.parent.mkdir()
             skill.write_text("A skill\n", encoding="utf-8")
@@ -72,10 +84,14 @@ class VaultTests(unittest.TestCase):
             }), encoding="utf-8")
             html = render_vault({"ABC123": {"status": "draft", "draft_path": str(skill)}},
                                 root / "jobs", root, token="test")
-            self.assertIn("Demostración preparada por el workflow", html)
+            self.assertIn("Ejemplo de lo que hace la skill", html)
             self.assertIn('src="/demo/ABC123"', html)
+            self.assertIn("El video enseña", html)
+            self.assertIn("Sigue la idea del video", html)
             self.assertIn("Aprobar e instalar", html)
-            self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", html)
+            self.assertIn('<details class="card" open>', html)
+            self.assertNotIn("Prueba adicional opcional", html)
+            self.assertNotIn("&lt;script&gt;alert(1)&lt;/script&gt;", html)
             self.assertNotIn("<script>alert(1)</script>", html)
 
     def test_motion_demo_shows_observed_stages_and_cautions_without_them(self):
@@ -104,7 +120,7 @@ class VaultTests(unittest.TestCase):
                 (job / name).write_bytes(b"PNG" + bytes([index]))
             (job / "auto-demo.json").write_text(json.dumps(demo), encoding="utf-8")
             html = render_vault(state, root / "jobs", root, token="test")
-            self.assertIn("Movimiento observado en navegador", html)
+            self.assertIn("Momentos del movimiento", html)
             self.assertIn('src="/motion/ABC123/0"', html)
             self.assertIn("Aprobar e instalar", html)
 
@@ -113,7 +129,7 @@ class VaultTests(unittest.TestCase):
             root = Path(temp)
             html = render_vault({"ABC123": {"status": "needs_review", "draft_path": "C:/private/SKILL.md"}},
                                 root / "jobs", root, token="test")
-            self.assertIn("Volver a corregir el borrador", html)
+            self.assertIn("Volver a pedir el cambio", html)
             self.assertNotIn('value="activate"', html)
 
     def test_shows_invocation_and_rename_for_installed_skill(self):
@@ -127,7 +143,8 @@ class VaultTests(unittest.TestCase):
             }), encoding="utf-8")
             html = render_vault({"ABC123": {"status": "draft"}}, root / "jobs", root, token="test")
             self.assertIn("$better-name", html)
-            self.assertIn("Dónde está instalada", html)
+            self.assertNotIn("Dónde está instalada", html)
+            self.assertIn('<details class="card">', html)
             self.assertIn('value="rename"', html)
             self.assertIn('name="skill_name" value="better-name"', html)
 
@@ -147,7 +164,7 @@ class VaultTests(unittest.TestCase):
             }), encoding="utf-8")
             html = render_vault({"ABC123": {"status": "draft", "draft_path": str(draft)}},
                                 root / "jobs", root, token="test")
-            self.assertIn("$suggested-name", html)
+            self.assertIn("Nombre de la skill", html)
             self.assertIn('name="skill_name" value="suggested-name"', html)
             self.assertIn('value="activate"', html)
 
@@ -164,12 +181,12 @@ class VaultTests(unittest.TestCase):
                               '"summary":"<script>","gaps":["Sin navegador"]}}', encoding="utf-8")
             html = render_vault({"ABC123": {"status": "draft", "draft_path": str(skill)}}, root / "jobs", root,
                                 token="local-token")
-            self.assertIn("Probar este borrador", html)
-            self.assertIn("Cómo revisar una skill, paso a paso", html)
+            self.assertNotIn("Probar este borrador", html)
+            self.assertNotIn("Cómo revisar una skill, paso a paso", html)
             self.assertIn("Aprobar con vacíos e instalar", html)
-            self.assertIn("Corregir borrador y repetir demostración", html)
+            self.assertIn("Corregir y crear otro ejemplo", html)
             self.assertIn("Sin navegador", html)
-            self.assertIn("La prueba no creó archivos", html)
+            self.assertIn("La prueba adicional no creó archivos", html)
             self.assertNotIn('http-equiv="refresh"', html)
             self.assertNotIn("<script>", html)
 

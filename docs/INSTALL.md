@@ -25,8 +25,8 @@ Abre Terminal en la carpeta extraída y ejecuta `sh setup.sh`. Introduce la ruta
 1. Desde el teléfono, sube un `.mp4` corto, propio o autorizado, a la carpeta de Drive. Espera a que aparezca en el computador. Un enlace de Drive a un video no equivale al archivo de video; para un Reel público usa un `.txt` con su enlace.
 2. En Windows espera hasta cinco minutos; en macOS/Linux deja el trabajador `watch` abierto. En la bóveda pulsa «Actualizar progreso».
 3. El workflow prepara automáticamente un caso, una muestra y una revisión. En skills de movimiento verás el prototipo y tres estados capturados. Pulsa «Actualizar progreso» si aún aparece «Preparando demostración».
-4. Abre «Qué enseñaba el video», «Leer skill» y «Contraste y adaptaciones». Compara esos apartados con la demostración, sus límites y sus vacíos.
-5. Si falta algo, abre «Pedir corrección», describe el problema y pulsa «Corregir borrador y repetir demostración». Si te convence, elige el **nombre para invocar e instalar** y pulsa «Aprobar e instalar». En Codex escribe `$nombre` para llamar la skill. La bóveda muestra el nombre y las carpetas donde se instaló. Puedes cambiar el nombre de una skill ya instalada desde su tarjeta. Las skills personales nunca se suben al repositorio público.
+4. Compara «El video enseña», el ejemplo y la evaluación breve. Si quieres leer el texto completo, abre «Ver instrucciones de la skill».
+5. Si falta algo, abre «Pedir un cambio», describe el problema y pulsa «Corregir y crear otro ejemplo». Si te convence, elige el **nombre de la skill** y pulsa «Aprobar e instalar». En Codex escribe `$nombre` para llamarla. La bóveda muestra ese nombre en la tarjeta instalada y permite cambiarlo desde «Cambiar nombre». Las skills personales nunca se suben al repositorio público.
 
 ## Si algo no avanza
 
